@@ -27,7 +27,8 @@ MochiOS の mobile / desktop から使う Minecraft 内 EC アプリ **Piggle Sh
   - 配送先 = 注文時入力 MCID（PiggleShop はプレイヤー認証しない）。
   - **アイテムテクスチャ = バニラ MC テクスチャ**（`tools/extract-textures.ps1` で client-extra.jar から抽出、ベース名。client は `item.tex` 参照）。3D ブロックアイコンの忠実描画は後続課題。
 - **依存**: `mochi` コネクタmod。compileOnly で **MochiOS2.0 forge の deobf クラス**（`../../MochiOS2.0/minecraft/forge/build/classes/java/main`、`build.gradle` の `mochi_forge_classes` で上書き可）を参照。MochiOS2.0/minecraft/forge を先にビルドしておく。実行時は同サーバーの `mochi` mod が提供。
-- **デプロイ**: 同 MC サーバーに `mochi` + `piggleshop` 両mod。`mochi-server.toml [connector].hosted_app_ids` に `"piggleshop"` 追加。サイドカー `mochi-mc-connector` + PKI（MochiOS2.0 の `tools/mc-connector-dev.ps1`）。
+- **デプロイ（サーバー mod）**: 同 MC サーバーに `mochi` + `piggleshop` 両mod。`mochi-server.toml [connector].hosted_app_ids` に `"piggleshop"` 追加。サイドカー `mochi-mc-connector` + PKI（MochiOS2.0 の `tools/mc-connector-dev.ps1`）。
+- **デプロイ（mobile クライアント）= 外部アプリローダー §4.6 経由**: MochiOS2.0 には汎用の外部アプリ FG ローダーが実装済（`os.appRegistry.{list,install,uninstall}` + `HostAppInstaller`、参照 `com.mochi.appstore`）。配置はバンドルを **registry(:7405)+repository(:7409) に publish** → in-phone App Store でインストール。`tools/publish-piggleshop.ps1 -Token <session bearer>`（内部で `package.ps1` → MochiOS2.0 `tools/mochi-publish-app.ps1`）。バンドルに `icon.png` 必須（loader が icon.sha256 検証）。バンドル検証済（`mochi-app-pack` で 1499 files / 1.75MB tar、manifest 除外）。
 
 ## 問題 / 要検証
 
