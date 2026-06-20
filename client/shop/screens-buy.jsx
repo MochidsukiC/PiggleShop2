@@ -24,7 +24,7 @@ function LineThumb({ id, size = 56 }) {
   return (
     <div className="checker" style={{ width: size, height: size, flexShrink: 0,
       border: "1.5px solid var(--ink)", display: "grid", placeItems: "center", overflow: "hidden" }}>
-      <img className="px slot-img" src={"assets/items/" + id + ".png"} alt="" onError={imgErr}
+      <img className="px slot-img" src={PG_IMG(id)} alt="" onError={imgErr}
         style={{ width: "78%", height: "78%", objectFit: "contain" }} />
     </div>
   );
@@ -437,7 +437,7 @@ function CheckoutBarter({ form, setForm, onComplete }) {
               {cart.slice(0, 8).map((l) => (
                 <div key={l.id} className="checker" style={{ width: 40, height: 40, border: "1.5px solid #000",
                   display: "grid", placeItems: "center", position: "relative" }}>
-                  <img className="px" src={"assets/items/" + l.id + ".png"} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
+                  <img className="px" src={PG_IMG(l.id)} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
                   {l.qty > 1 && <span style={{ position: "absolute", bottom: -7, right: -7, background: "var(--crimson)",
                     color: "#fff", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "1px 4px",
                     border: "1px solid #000" }}>{l.qty}</span>}
@@ -519,7 +519,7 @@ function OrderComplete({ order }) {
           {order.lines.map(([id, q]) => (
             <div key={id} className="checker" style={{ width: 44, height: 44, border: "1.5px solid var(--ink)",
               display: "grid", placeItems: "center", position: "relative" }}>
-              <img className="px" src={"assets/items/" + id + ".png"} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
+              <img className="px" src={PG_IMG(id)} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
               {q > 1 && <span style={{ position: "absolute", bottom: -6, right: -6, background: "var(--ink)",
                 color: "#fff", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "1px 4px" }}>{q}</span>}
             </div>
@@ -582,7 +582,7 @@ function OrdersScreen() {
                 <div key={id} onClick={() => go("detail", { id })} className="checker"
                   style={{ width: 44, height: 44, border: "1.5px solid var(--ink)", display: "grid",
                     placeItems: "center", position: "relative", cursor: "pointer" }}>
-                  <img className="px" src={"assets/items/" + id + ".png"} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
+                  <img className="px" src={PG_IMG(id)} alt="" onError={imgErr} style={{ width: "78%", height: "78%" }} />
                   {q > 1 && <span style={{ position: "absolute", bottom: -6, right: -6, background: "var(--ink)",
                     color: "#fff", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "1px 4px" }}>{q}</span>}
                 </div>

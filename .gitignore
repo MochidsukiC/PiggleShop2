@@ -9,6 +9,11 @@
 **/target/
 app-desktop/gen/
 
+# Mojang-derived item/block textures (extracted locally by tools/extract-textures.ps1;
+# not redistributed in-repo). Design art (brand/, banners/) IS committed.
+client/assets/items/
+client/assets/tex/
+
 # ── Assembled bundle output (tools/package.ps1 copies client/ into these) ──
 app-mobile/apps/com.mochi.piggleshop/shop/
 app-mobile/apps/com.mochi.piggleshop/assets/

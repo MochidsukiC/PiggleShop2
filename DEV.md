@@ -21,10 +21,11 @@ MochiOS の mobile / desktop から使う Minecraft 内 EC アプリ **Piggle Sh
 ## 現在の仕様
 
 - **本Mod**（実装済）:
-  - `Catalog` が `resources/piggleshop/catalog.json`（デザイン data.jsx 移植、36品 + cats + rarity、各 item に `mc`=MC item id）を読み込み権威データ化。
+  - **出品リスト = AEM 権威**（`AutoEconomicAPI.getAllPrices()`）。`CatalogService` が AEM から (itemId, 表示名, 価格) を取得し、**カテゴリ = クリエイティブタブ**（`CatalogMeta` が起動時に走査）/ **レア度 = `Item.getRarity()`**（common/uncommon/rare/epic）/ **説明 = "システムが出品"** を付与。item の `id` は MC リソースid、`tex` は名前空間除去のテクスチャ名。AEM 未導入時は静的 `catalog.json`（デザイン36品）にフォールバック。`AutoEconomicAPIProvider`（リフレクション）で安全取得。
   - `PiggleShopExtension` verb: `status` / `catalog` / `item{id}` / `checkout{order_id,items:[{id,qty}],mcid}` / `orders{mcid}`。
-  - checkout: サーバー側再価格 → **モック決済（自動承認・実引落なし）** → `mcid` を `getPlayerByName` 解決 → `server.submit` でインベントリ付与（maxStack 分割・溢れ drop）→ `order_id` 冪等。送料: 小計50エメ以上 or 0 で無料、それ以外 1.50。
+  - checkout: **AEM `getCurrentPrice` で再価格**（権威・client価格は信用しない）→ **モック決済（自動承認・実引落なし）** → `mcid` を `getPlayerByName` 解決 → `server.submit` でインベントリ付与（maxStack 分割・溢れ drop）→ **`addTransaction` で売上記録** → `order_id` 冪等。送料: 小計50エメ以上で無料、それ以外 1.50。
   - 配送先 = 注文時入力 MCID（PiggleShop はプレイヤー認証しない）。
+  - **アイテムテクスチャ = バニラ MC テクスチャ**（`tools/extract-textures.ps1` で client-extra.jar から抽出、ベース名。client は `item.tex` 参照）。3D ブロックアイコンの忠実描画は後続課題。
 - **依存**: `mochi` コネクタmod。compileOnly で **MochiOS2.0 forge の deobf クラス**（`../../MochiOS2.0/minecraft/forge/build/classes/java/main`、`build.gradle` の `mochi_forge_classes` で上書き可）を参照。MochiOS2.0/minecraft/forge を先にビルドしておく。実行時は同サーバーの `mochi` mod が提供。
 - **デプロイ**: 同 MC サーバーに `mochi` + `piggleshop` 両mod。`mochi-server.toml [connector].hosted_app_ids` に `"piggleshop"` 追加。サイドカー `mochi-mc-connector` + PKI（MochiOS2.0 の `tools/mc-connector-dev.ps1`）。
 

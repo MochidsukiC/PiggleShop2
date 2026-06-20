@@ -8,6 +8,7 @@ import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
 import jp.houlab.mochidsuki.mochi.MochiMod;
+import jp.houlab.mochidsuki.piggleshop.aem.AutoEconomicAPIProvider;
 
 /**
  * Piggle Shop — Forge 1.20.1 entry point.
@@ -47,10 +48,20 @@ public final class PiggleShopMod {
      */
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        Catalog catalog = Catalog.load();
-        MochiMod.DISPATCH.register(APP_ID, new PiggleShopExtension(event.getServer(), catalog));
-        LOGGER.info("Piggle Shop: receiver extension registered for app_id '{}'. "
+        var server = event.getServer();
+        // Static design catalog = the AEM-absent fallback.
+        Catalog fallback = Catalog.load();
+        // Build the item → creative-tab category map (for the AEM listing).
+        CatalogMeta meta = new CatalogMeta();
+        meta.build(server);
+        // AEM is the authoritative listing/price source; obtained by reflection so
+        // the mod degrades gracefully when AEM is not installed.
+        CatalogService catalog = new CatalogService(
+                server, AutoEconomicAPIProvider.getInstance(), meta, fallback);
+
+        MochiMod.DISPATCH.register(APP_ID, new PiggleShopExtension(server, catalog));
+        LOGGER.info("Piggle Shop: receiver extension registered for app_id '{}' (AEM available={}). "
                 + "Ensure mochi-server.toml [connector].hosted_app_ids contains \"{}\".",
-                APP_ID, APP_ID);
+                APP_ID, AutoEconomicAPIProvider.getInstance().isAvailable(), APP_ID);
     }
 }

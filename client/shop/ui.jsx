@@ -134,7 +134,7 @@ function ItemImage({ item }) {
     <div className={plateClass} style={{ ...plateStyle,
       border: "1px solid var(--gold-line)", borderBottom: "none" }}>
       {facets}
-      <img className="px slot-img" src={"assets/items/" + item.id + ".png"} alt={item.name}
+      <img className="px slot-img" src={"assets/items/" + (item.tex || item.id) + ".png"} alt={item.name}
         onError={hideOnError} />
     </div>
   );

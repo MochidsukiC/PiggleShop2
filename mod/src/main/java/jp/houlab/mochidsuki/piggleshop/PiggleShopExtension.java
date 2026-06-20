@@ -1,9 +1,12 @@
 package jp.houlab.mochidsuki.piggleshop;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -21,7 +24,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
+import jp.houlab.mochidsuki.autoeconomicmanagementmod.common.db.entity.TransactionLogs;
 import jp.houlab.mochidsuki.mochi.connector.CommandDispatch;
+import jp.houlab.mochidsuki.piggleshop.aem.AutoEconomicAPIProvider;
 
 /**
  * Piggle Shop receiver extension (DEV.md §7.3) — the in-JVM "enclosed backend".
@@ -31,22 +36,23 @@ import jp.houlab.mochidsuki.mochi.connector.CommandDispatch;
  * thread, and reply (toward the requester) with a JSON result. Verbs:
  * <ul>
  *   <li>{@code status}   → {ok, app, version}</li>
- *   <li>{@code catalog}  → the full catalog ({version, currency, cats, rarity, items})</li>
+ *   <li>{@code catalog}  → the full catalog (AEM listing + creative-tab cats + rarity)</li>
  *   <li>{@code item}     → {ok, item}</li>
- *   <li>{@code checkout} → server re-price + mock payment + inventory delivery to the entered MCID</li>
+ *   <li>{@code checkout} → AEM re-price + mock payment + inventory delivery to the entered MCID</li>
  *   <li>{@code orders}   → a player's recent orders</li>
  * </ul>
  *
+ * <p>The listing and prices are authoritative from AEM (via {@link CatalogService});
+ * checkout re-prices against the live AEM price and records each sale via
+ * {@link AutoEconomicAPI#addTransaction}. Payment is a <b>mock</b> (auto-approved,
+ * no real debit) per the current design — the redirect/approve UX lives in the client.
+ *
  * <p>Checkout is <b>idempotent by {@code order_id}</b>: the id is reserved before
  * delivery (see {@link #ordersById}), so a concurrent or replayed order returns
- * the prior result and never double-grants. This idempotency is <em>process-local
- * only</em> — it does not survive a server restart (persistent dedupe is a tracked
- * follow-up). World mutation runs on the server thread
- * ({@link MinecraftServer#submit}); {@link #handle} itself runs on the connector
- * IO thread, so blocking on that future is safe (no deadlock).
- *
- * <p>Payment is a <b>mock</b> (auto-approved, no real debit) per the current
- * design — the redirect/approve UX lives in the client.
+ * the prior result and never double-grants. Idempotency is <em>process-local only</em>
+ * (a tracked follow-up). World mutation runs on the server thread
+ * ({@link MinecraftServer#submit}); {@link #handle} runs on the connector IO thread,
+ * so blocking on that future is safe (no deadlock).
  */
 public final class PiggleShopExtension implements CommandDispatch.Handler {
 
@@ -63,8 +69,13 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
      */
     private static final int MAX_QTY_PER_LINE = 4096;
 
+    /** Recorded as the seller in the AEM transaction ledger. */
+    private static final String SELLER_UUID = "PIGGLE-SHOP-NPC";
+    private static final String TRANSACTION_TYPE = "SHOP";
+
     private final MinecraftServer server;
-    private final Catalog catalog;
+    private final CatalogService catalog;
+    private final AutoEconomicAPIProvider aem;
 
     /**
      * order_id → order result future. Inserted (incomplete) at checkout start to
@@ -77,9 +88,10 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
     /** mcid (lower-case) → order_ids, newest first. */
     private final Map<String, List<String>> ordersByPlayer = new ConcurrentHashMap<>();
 
-    public PiggleShopExtension(MinecraftServer server, Catalog catalog) {
+    public PiggleShopExtension(MinecraftServer server, CatalogService catalog) {
         this.server = server;
         this.catalog = catalog;
+        this.aem = AutoEconomicAPIProvider.getInstance();
     }
 
     @Override
@@ -122,6 +134,7 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         o.addProperty("ok", true);
         o.addProperty("app", "piggleshop");
         o.addProperty("version", catalog.root().get("version").getAsString());
+        o.addProperty("aem", aem.isAvailable());
         return o;
     }
 
@@ -132,7 +145,7 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         }
         JsonObject o = new JsonObject();
         o.addProperty("ok", true);
-        o.add("item", it.deepCopy());
+        o.add("item", it);
         return o;
     }
 
@@ -166,8 +179,7 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         // Reserve the order_id atomically *before* any delivery. The first caller
         // installs an incomplete future; any concurrent or replayed checkout with
         // the same id sees the existing future, joins it, and returns the prior
-        // result — so a replay or a race can never double-grant. (Idempotency is
-        // process-local: it does not survive a server restart — see DEV.md.)
+        // result — so a replay or a race can never double-grant.
         CompletableFuture<JsonObject> slot = new CompletableFuture<>();
         CompletableFuture<JsonObject> existing = ordersById.putIfAbsent(orderId, slot);
         if (existing != null) {
@@ -176,18 +188,16 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
                 dup = existing.join().deepCopy();
             } catch (RuntimeException e) {
                 // The original attempt failed and abandoned its reservation; the
-                // id is now free to retry. Surface a retryable error rather than
-                // hanging or masquerading as a success.
+                // id is now free to retry. Surface a retryable error.
                 return error("retry", "concurrent checkout failed for order_id=" + orderId);
             }
             dup.addProperty("duplicate", true);
             return dup;
         }
 
-        // From here we own `slot` and MUST resolve it. On any failure we complete
-        // it exceptionally (waking any waiter) and remove the reservation so the id
-        // can be retried; on success we complete it and keep it for idempotent
-        // replays. Errors (e.g. bad_mcid) are *not* grants, so they free the id.
+        // We own `slot` and MUST resolve it. On failure we complete it exceptionally
+        // (waking any waiter) and remove the reservation so the id can be retried;
+        // on success we complete it and keep it for idempotent replays.
         try {
             JsonObject order = processCheckout(req, orderId);
             if (!order.get("ok").getAsBoolean()) {
@@ -207,9 +217,10 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
     }
 
     /**
-     * The pure checkout body: validate, server-authoritatively re-price, run the
-     * mock payment, and deliver on the server thread. Returns either an
-     * {@code error(...)} object (no grant happened) or a completed order object.
+     * The pure checkout body: validate, server-authoritatively re-price (live AEM
+     * price), run the mock payment, deliver on the server thread, and record the
+     * sale in the AEM ledger. Returns either an {@code error(...)} object (no grant
+     * happened) or a completed order object.
      */
     private JsonObject processCheckout(JsonObject req, String orderId) {
         String mcid = optString(req, "mcid");
@@ -238,8 +249,8 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
             if (!catalog.has(id) || qty <= 0 || qty > MAX_QTY_PER_LINE) {
                 return error("bad_line", "id=" + id + " qty=" + qty);
             }
-            double price = catalog.price(id);
-            lines.add(new Line(id, catalog.mcId(id), catalog.name(id), qty, price));
+            double price = catalog.priceNow(id);
+            lines.add(new Line(id, catalog.mc(id), catalog.name(id), qty, price));
             subtotal += price * qty;
         }
         double shipping = subtotal >= SHIP_FREE_OVER ? 0.0 : SHIP_FEE;
@@ -252,16 +263,19 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         // here does not deadlock the server.
         Delivery delivery = server.submit(() -> deliver(mcid, lines)).join();
 
-        // A failed delivery granted nothing (deliver() is atomic: player_offline
-        // and unknown_item both grant zero items before returning). Treat it as a
-        // retryable error so checkout() releases the order_id reservation — a
-        // transient offline player, or a catalog fix for a bad item id, can then
-        // be retried with the same order_id without ever double-granting.
+        // A failed delivery granted nothing (deliver() is atomic). Treat it as a
+        // retryable error so checkout() releases the order_id reservation.
         if (!delivery.ok) {
             return error("not_delivered", delivery.error);
         }
 
-        // Reaching here means delivery succeeded (failures returned above).
+        // Record each sale in the AEM ledger (best-effort; never blocks delivery).
+        if (delivery.buyer != null) {
+            for (Line l : lines) {
+                recordSale(delivery.buyer, l);
+            }
+        }
+
         JsonObject order = new JsonObject();
         order.addProperty("ok", true);
         order.addProperty("success", true);
@@ -292,18 +306,17 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
     private Delivery deliver(String mcid, List<Line> lines) {
         ServerPlayer player = server.getPlayerList().getPlayerByName(mcid);
         if (player == null) {
-            return new Delivery(false, 0, "player_offline");
+            return new Delivery(false, 0, "player_offline", null);
         }
-        // Resolve every catalog item id first. A bad/typo mc id is a packaging
-        // error, not a partial-fulfilment case — fail the whole order before
-        // granting anything so we never record a missing line as delivered.
+        // Resolve every item id first. A bad/typo mc id is a packaging error, not a
+        // partial-fulfilment case — fail the whole order before granting anything.
         List<Item> resolved = new ArrayList<>(lines.size());
         for (Line line : lines) {
             ResourceLocation rl = line.mc == null ? null : ResourceLocation.tryParse(line.mc);
             Item item = rl == null ? null : ForgeRegistries.ITEMS.getValue(rl);
             if (item == null) {
                 LOGGER.warn("piggleshop: unknown item '{}' (catalog id {})", line.mc, line.id);
-                return new Delivery(false, 0, "unknown_item:" + line.id);
+                return new Delivery(false, 0, "unknown_item:" + line.id, null);
             }
             resolved.add(item);
         }
@@ -322,7 +335,30 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
                 delivered += n;
             }
         }
-        return new Delivery(true, delivered, null);
+        return new Delivery(true, delivered, null, player.getUUID());
+    }
+
+    /** Record one sold line in the AEM transaction ledger (best-effort). */
+    private void recordSale(UUID buyer, Line line) {
+        aem.getAPI().ifPresent(api -> {
+            try {
+                BigDecimal unit = BigDecimal.valueOf(line.price);
+                TransactionLogs tx = new TransactionLogs();
+                tx.setTransactionId(UUID.randomUUID().toString());
+                tx.setTimestamp(LocalDateTime.now());
+                tx.setItemId(line.mc);
+                tx.setItemNbtHash(null);
+                tx.setQuantity(line.qty);
+                tx.setUnitPrice(unit);
+                tx.setSellerUuid(SELLER_UUID);
+                tx.setBuyerUuid(buyer.toString());
+                tx.setTransactionType(TRANSACTION_TYPE);
+                tx.setServerStandardPrice(unit);
+                api.addTransaction(tx);
+            } catch (Exception e) {
+                LOGGER.debug("piggleshop: addTransaction failed for {}: {}", line.mc, e.toString());
+            }
+        });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -339,12 +375,9 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
 
     /**
      * Reads {@code k} as a string, returning "" for anything that is not a JSON
-     * string (absent, null, object/array, or a non-string primitive). Strict: a
-     * number/boolean is rejected rather than coerced (e.g. {@code "mcid":123} does
-     * not become {@code "123"}). Must not throw — callers read {@code req_id}/
-     * {@code verb} outside the verb-dispatch try/catch, so a hostile
-     * {@code {"verb":{}}} must degrade to "" (→ unknown_verb) rather than escaping
-     * {@link #handle} with no reply.
+     * string (absent, null, object/array, or a non-string primitive). Strict and
+     * must not throw — callers read {@code req_id}/{@code verb} outside the
+     * verb-dispatch try/catch.
      */
     private static String optString(JsonObject o, String k) {
         JsonElement e = o.get(k);
@@ -353,10 +386,9 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
     }
 
     /**
-     * Reads {@code k} as an int, tolerating client type sloppiness: returns 0
-     * (rejected by the caller's {@code qty <= 0} guard) when the key is absent or
-     * not an exact integer. A non-integral number (e.g. {@code 1.5}) is rejected
-     * rather than silently truncated, so quantity validation stays strict.
+     * Reads {@code k} as an int, returning 0 (rejected by the caller's
+     * {@code qty <= 0} guard) when absent or not an exact integer. Fractional /
+     * out-of-range numbers are rejected rather than truncated.
      */
     private static int optInt(JsonObject o, String k) {
         if (!o.has(k) || !o.get(k).isJsonPrimitive() || !o.getAsJsonPrimitive(k).isNumber()) {
@@ -365,7 +397,6 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         try {
             return o.get(k).getAsBigDecimal().intValueExact();
         } catch (ArithmeticException | NumberFormatException e) {
-            // fractional, out-of-int-range, or unparseable number → invalid qty
             return 0;
         }
     }
@@ -380,5 +411,5 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
 
     private record Line(String id, String mc, String name, int qty, double price) {}
 
-    private record Delivery(boolean ok, int delivered, String error) {}
+    private record Delivery(boolean ok, int delivered, String error, UUID buyer) {}
 }

@@ -12,8 +12,19 @@ function imgErr(e) { e.currentTarget.style.visibility = "hidden"; }
 /* ────────────────────────── HOME ────────────────────────── */
 function HomeScreen() {
   const { t, go, device } = useShop();
-  const trending = ITEMS.filter((i) => i.hot);
   const heroLines = t.heroTitle.split("\n");
+
+  // Featured / trending / new are the design's curated ids when present (static
+  // catalog), else derived from the live catalog (AEM listing): price-ranked and
+  // recency slices, so Home is populated for any catalog.
+  const byPrice = [...ITEMS].sort((a, b) => b.price - a.price);
+  const curated = (ids) => ids.map((id) => ITEM[id]).filter(Boolean);
+  const featList = curated(FEATURED);
+  const featured = featList.length >= 3 ? featList : byPrice.slice(0, 8);
+  const hot = ITEMS.filter((i) => i.hot);
+  const trending = hot.length >= 3 ? hot : byPrice.slice(0, 10);
+  const newList = curated(NEW_ARR);
+  const newItems = newList.length >= 3 ? newList : [...ITEMS].slice(-8).reverse();
 
   return (
     <div className="fadein" style={{ paddingBottom: 28 }}>
@@ -94,7 +105,7 @@ function HomeScreen() {
         <SectionHead kicker="PICKED FOR YOU" title={t.secFeatured}
           action="すべて見る" onAction={() => go("category", { cat: "all" })} />
         <div className="item-grid">
-          {FEATURED.filter((id) => ITEM[id]).map((id) => <ItemCard key={id} item={ITEM[id]} />)}
+          {featured.map((item) => <ItemCard key={item.id} item={item} />)}
         </div>
       </div>
 
@@ -116,7 +127,7 @@ function HomeScreen() {
         <SectionHead kicker="JUST IN" title={t.secNew}
           action="もっと" onAction={() => go("category", { cat: "all" })} />
         <div className="item-grid">
-          {NEW_ARR.filter((id) => ITEM[id]).map((id) => <ItemCard key={id} item={ITEM[id]} />)}
+          {newItems.map((item) => <ItemCard key={item.id} item={item} />)}
         </div>
       </div>
     </div>
@@ -130,7 +141,7 @@ const SORTS = [
   { id: "price-hi", label: "価格が高い順" },
   { id: "rarity",   label: "レア度順" },
 ];
-const RARITY_ORDER = { common: 0, rare: 1, epic: 2, legendary: 3 };
+const RARITY_ORDER = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
 
 function CategoryScreen({ params }) {
   const { t } = useShop();
@@ -284,7 +295,7 @@ function DetailScreen({ params }) {
             display: "grid", placeItems: "center", overflow: "hidden" }}>
             <CrystalCluster corner="br" size={120} palette={cat.crystal} density={0.8} style={{ opacity: 0.7 }} />
             <CrystalCluster corner="tl" size={64} palette={cat.crystal} density={0.7} style={{ opacity: 0.4 }} />
-            <img className="px slot-img" src={"assets/items/" + item.id + ".png"} alt={item.name}
+            <img className="px slot-img" src={"assets/items/" + (item.tex || item.id) + ".png"} alt={item.name}
               onError={imgErr}
               style={{ width: "62%", height: "62%", position: "relative", zIndex: 1, objectFit: "contain" }} />
             <div style={{ position: "absolute", top: 12, left: 12, zIndex: 3 }}>

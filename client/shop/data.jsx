@@ -8,7 +8,8 @@
    server-authoritative while the語調 (tone) copy stays a UI concern.
    ===================================================================== */
 
-const PG_IMG = (id) => "assets/items/" + id + ".png";
+const PG_IMG = (id) =>
+  "assets/items/" + ((window.ITEM && window.ITEM[id] && window.ITEM[id].tex) || id) + ".png";
 
 /* ---- currency: エメ (エメラルド), 2 decimals ---- */
 function eme(n) { return Number(n).toFixed(2); }

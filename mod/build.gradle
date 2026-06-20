@@ -66,6 +66,13 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     compileOnly files(mochiForgeClasses)
+
+    // AutoEconomicManagementMod (AEM) — the authoritative listing + price source
+    // (common API module: AutoEconomicAPI / PriceSearchResult / TransactionLogs).
+    // Plain DTOs, no Minecraft types cross the boundary, so the reobf common jar
+    // compiles cleanly. Runtime is provided by the AEM mod on the server
+    // (optional dependency in mods.toml); the mod degrades gracefully if absent.
+    compileOnly files('libs/autoeconomicmanagementmod-common.jar')
 }
 
 // Property-templated mods.toml / pack.mcmeta (gradle.properties substitution).
