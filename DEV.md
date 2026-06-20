@@ -33,6 +33,9 @@ MochiOS の mobile / desktop から使う Minecraft 内 EC アプリ **Piggle Sh
 1. **transport（最重要）**: Phone の MNN/`https://piggleshop.<UUID>.minecraft.auto.mnn` リクエストが Hub→command-bus→mod `CMD_INBOUND` まで橋渡しされるか。HTTP gateway(:7411) の `.auto.mnn` 解決 + mod IPC への HTTP↔command-bus 変換、及び**返信経路**（reply.reply が phone まで戻るか）を in-world で確認。ギャップ時は MochiOS2.0 側対応（承認ゲート）。
 2. **UUID 取得**: Phone がアドレスに入れる自分の MC UUID の取得元。`mochi.phoneState.owner`（account_id）と MC UUID の束縛は §7.3.8 で後続（connector の `EvLogin.account_id` も現状 null）。
 3. AEM 価格連携は任意/参考。カタログ価格を MVP 権威。
+4. **checkout 冪等性の永続化（設計判断・要承認）**: `order_id` 重複防止は現状プロセス内メモリのみ。サーバ再起動後に同一 `order_id` が再到着すると新規注文として二重付与され得る。完了注文の永続化（`SavedData` 等）を別タスクで検討。
+5. **stock / enchants の権威化（任意・要設計）**: catalog の `stock` は checkout で未強制（在庫枯渇セマンティクスは未定義）。`enchants` は表示用日本語文字列で配送に反映されない。在庫上限の強制やエンチャント付与配送を行うなら、catalog スキーマ（enchant registry id + level）と注文セマンティクスの設計が必要。
+6. **build.gradle の mochi クラスパス**: `mochi_forge_classes` の既定値は `project.rootDir` 相対（`../../MochiOS2.0/minecraft/forge/build/classes/java/main`）で、`MochiOS2.0` と兄弟配置のチェックアウトを前提とする。worktree や別レイアウトでは解決に失敗するため `-Pmochi_forge_classes=<絶対パス>` 上書きが必要。CI/共有ビルドでは絶対パス指定か配置規約の明文化を検討。
 
 ## TODO
 
