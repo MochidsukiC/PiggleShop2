@@ -1,0 +1,32 @@
+# ── Gradle / Java (mod/) ───────────────────────────────────────────────
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+**/run/
+.kotlin
+
+# ── Rust / Tauri (app-desktop/) ────────────────────────────────────────
+**/target/
+app-desktop/gen/
+
+# ── Node (if any tooling is added later) ───────────────────────────────
+**/node_modules/
+
+# ── IDE / OS ───────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+bin/
+.vscode/
+.DS_Store
+
+# NOTE: mod/ compiles against the co-located MochiOS2.0 forge build output
+# (deobf classes, compileOnly) for the connector API — see mod/build.gradle
+# (mochi_forge_classes). Build MochiOS2.0/minecraft/forge first.
