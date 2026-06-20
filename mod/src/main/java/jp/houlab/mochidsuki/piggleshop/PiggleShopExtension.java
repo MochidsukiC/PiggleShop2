@@ -331,14 +331,18 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
     }
 
     /**
-     * Reads {@code k} as a string, returning "" for absent/null/non-primitive
-     * values. Must not throw: callers read {@code req_id}/{@code verb} outside the
-     * verb-dispatch try/catch, so a hostile {@code {"verb":{}}} must degrade to ""
-     * (→ unknown_verb) rather than escaping {@link #handle} with no reply.
+     * Reads {@code k} as a string, returning "" for anything that is not a JSON
+     * string (absent, null, object/array, or a non-string primitive). Strict: a
+     * number/boolean is rejected rather than coerced (e.g. {@code "mcid":123} does
+     * not become {@code "123"}). Must not throw — callers read {@code req_id}/
+     * {@code verb} outside the verb-dispatch try/catch, so a hostile
+     * {@code {"verb":{}}} must degrade to "" (→ unknown_verb) rather than escaping
+     * {@link #handle} with no reply.
      */
     private static String optString(JsonObject o, String k) {
         JsonElement e = o.get(k);
-        return e != null && !e.isJsonNull() && e.isJsonPrimitive() ? e.getAsString() : "";
+        return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()
+                ? e.getAsString() : "";
     }
 
     /**
