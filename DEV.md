@@ -41,10 +41,14 @@ MochiOS の mobile / desktop から使う Minecraft 内 EC アプリ **Piggle Sh
 ## TODO
 
 - [x] git init + マルチモジュール骨組み
-- [x] 本Mod 受信拡張（catalog.json / PiggleShopExtension / DISPATCH 登録）
-- [ ] 本Mod コンパイル確認
-- [ ] transport 疎通検証（auto-route → mod、mc-connector.md §8）
-- [ ] 共有 web UI（client/ デザイン移植 + piggle-sdk.js + アセット + dev.html）
-- [ ] mobile バンドル（manifest + index.html、mods/mochi/apps 配置、runClient 検証）
-- [ ] desktop Tauri アプリ
-- [ ] 統合 E2E
+- [x] 本Mod 受信拡張（PiggleShopExtension / DISPATCH 登録）＋ コンパイル確認
+- [x] 本Mod 再帰レビュー反映（冪等性・入力検証・配送原子性）
+- [x] カタログを AEM ドリブンに改修（getAllPrices / 再価格 / addTransaction / クリエイティブタブ / MC レア度）
+- [x] 共有 web UI（client/ デザイン移植 + piggle-sdk.js + MC テクスチャ + dev.html）
+- [x] mobile バンドル（manifest + index.html）
+- [x] desktop Tauri アプリ骨格（app-desktop/、web=共有 client）
+- [ ] **transport 疎通検証（auto-route → mod、mc-connector.md §8）** ← 要 dev 環境（PKI/サイドカー/Hub/mochi+piggleshop mod）
+- [ ] ブラウザ実描画確認（client/dev.html を静的サーバーで）／in-world runClient／desktop `cargo tauri dev`
+- [ ] AEM 改修コミット `0b77cbc` の CodeX 再帰レビュー（CodeX 上限のため 6/25 以降に再実行）
+- [ ] デザインバナー bastion/hoard 取得（低不透明度の装飾、base64 手動取得が困難で保留）
+- [ ] 統合 E2E（mobile/desktop → auto-route → mod → 配送）
