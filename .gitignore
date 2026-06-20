@@ -9,8 +9,19 @@
 **/target/
 app-desktop/gen/
 
+# ── Assembled bundle output (tools/package.ps1 copies client/ into these) ──
+app-mobile/apps/com.mochi.piggleshop/shop/
+app-mobile/apps/com.mochi.piggleshop/assets/
+app-mobile/apps/com.mochi.piggleshop/piggle-sdk.js
+app-desktop/web/shop/
+app-desktop/web/assets/
+app-desktop/web/piggle-sdk.js
+
 # ── Node (if any tooling is added later) ───────────────────────────────
 **/node_modules/
+
+# ── Claude Code (agent worktrees, local settings) ──────────────────────
+.claude/
 
 # ── IDE / OS ───────────────────────────────────────────────────────────
 .idea/

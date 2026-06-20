@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Piggle Shop</title>
+    <!-- The shop is dark → the OS status bar uses light (bone) icons. -->
+    <meta name="mochi-statusbar" content="light" />
+    <!-- Shared OS UI runtime fonts/tokens, same-origin via __mochi_runtime__. -->
+    <link rel="stylesheet" href="/__mochi_runtime__/fonts.css" />
+    <link rel="stylesheet" href="shop/shop.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #0c0b10; overflow: hidden; }
+      #piggle-root { position: fixed; inset: 0; overflow: hidden; }
+      .boot { position: fixed; inset: 0; display: grid; place-items: center;
+              font-family: system-ui, sans-serif; color: #888; }
+    </style>
+  </head>
+  <body>
+    <div id="piggle-root"><div class="boot">Piggle Shop 起動中…</div></div>
+
+    <script>window.PIGGLE_DEVICE = "mobile";</script>
+
+    <!-- In-world prelude: React + Babel from the host runtime (same-origin). The
+         FG mochi.* API (storage / phoneState) is injected by the host into <head>. -->
+    <script src="/__mochi_runtime__/react.js"></script>
+    <script src="/__mochi_runtime__/react-dom.js"></script>
+    <script src="/__mochi_runtime__/babel.js"></script>
+
+    <script src="piggle-sdk.js"></script>
+    <script type="text/babel" src="shop/crystal.jsx"></script>
+    <script type="text/babel" src="shop/data.jsx"></script>
+    <script type="text/babel" src="shop/ui.jsx"></script>
+    <script type="text/babel" src="shop/screens-browse.jsx"></script>
+    <script type="text/babel" src="shop/screens-buy.jsx"></script>
+    <script type="text/babel" src="shop/app.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,61 @@
+/* global window */
+/* =====================================================================
+   DEV-ONLY catalog mirror for browser-dev (dev.html), used as an offline
+   fallback when no backend is reachable. The AUTHORITATIVE catalog lives in
+   mod/src/main/resources/piggleshop/catalog.json — keep them in sync.
+   ===================================================================== */
+window.__PIGGLE_CATALOG__ = {
+  version: "0.1.0-dev",
+  currency: "eme",
+  cats: [
+    { id: "blocks", label: "ブロック", en: "Blocks", glyph: "▦", color: "#A4C639", crystal: "meadow" },
+    { id: "tools",  label: "道具・武器", en: "Tools", glyph: "⚔", color: "#3B82F6", crystal: "ice" },
+    { id: "armor",  label: "防具", en: "Armor", glyph: "◈", color: "#8E44AD", crystal: "purple" },
+    { id: "food",   label: "食料・素材", en: "Goods", glyph: "✦", color: "#E67E22", crystal: "orange" },
+    { id: "rare",   label: "レア・エンチャント", en: "Rare", glyph: "✧", color: "#FF80AB", crystal: "pink" },
+  ],
+  rarity: {
+    common:    { label: "コモン", en: "COMMON", color: "#7c7c7c" },
+    rare:      { label: "レア", en: "RARE", color: "#3B82F6" },
+    epic:      { label: "エピック", en: "EPIC", color: "#8E44AD" },
+    legendary: { label: "伝説", en: "LEGENDARY", color: "#E67E22" },
+  },
+  items: [
+    { id: "dirt", name: "土ブロック", cat: "blocks", price: 0.08, rarity: "common", stock: 999, hot: false, blurb: "どこにでもある基本ブロック。地形づくりの相棒。" },
+    { id: "cobblestone", name: "丸石", cat: "blocks", price: 0.05, rarity: "common", stock: 999, hot: false, blurb: "石を掘れば無限に手に入る。建材の定番。" },
+    { id: "netherrack", name: "ネザーラック", cat: "blocks", price: 0.12, rarity: "common", stock: 640, hot: false, blurb: "ネザーの大地。火を点ければ永遠に燃える。" },
+    { id: "blackstone", name: "ブラックストーン", cat: "blocks", price: 0.45, rarity: "common", stock: 420, hot: true, blurb: "ブラスティオンの主役。ピグリンの故郷の石。" },
+    { id: "gold_block", name: "金ブロック", cat: "blocks", price: 81.00, rarity: "rare", stock: 18, hot: true, blurb: "インゴット9本ぶんの輝き。ピグリンが見惚れる。" },
+    { id: "gold_ore", name: "金鉱石", cat: "blocks", price: 6.50, rarity: "rare", stock: 64, hot: false, blurb: "ネザーにも湧く黄金の原石。" },
+    { id: "diamond_ore", name: "ダイヤモンド鉱石", cat: "blocks", price: 28.00, rarity: "epic", stock: 22, hot: false, blurb: "深層に眠る青き宝。鉄のツルハシ以上で採掘を。" },
+    { id: "emerald_ore", name: "エメラルド鉱石", cat: "blocks", price: 14.00, rarity: "rare", stock: 30, hot: false, blurb: "通貨エメの源。山岳のみで採れる希少鉱。" },
+    { id: "diamond_pickaxe", name: "ダイヤのツルハシ", cat: "tools", price: 34.50, rarity: "epic", stock: 28, hot: true, blurb: "硬い鉱石もサクサク。冒険者の必需品。", enchants: ["効率 III", "耐久 II"] },
+    { id: "netherite_pickaxe", name: "ネザライトのツルハシ", cat: "tools", price: 120.00, rarity: "legendary", stock: 6, hot: false, blurb: "溶岩に落ちても燃えない最上級の採掘具。", enchants: ["効率 V", "耐久 III", "修繕 I"] },
+    { id: "gold_sword", name: "金の剣", cat: "tools", price: 4.25, rarity: "common", stock: 80, hot: false, blurb: "脆いが手早い。ピグリンへの贈り物に最適。" },
+    { id: "diamond_sword", name: "ダイヤの剣", cat: "tools", price: 32.00, rarity: "epic", stock: 24, hot: true, blurb: "安定した火力。一本持っておけば安心。", enchants: ["鋭さ IV", "ドロップ増加 II"] },
+    { id: "netherite_sword", name: "ネザライトの剣", cat: "tools", price: 128.50, rarity: "legendary", stock: 5, hot: false, blurb: "戦場の終止符。ノックバック耐性つき。", enchants: ["鋭さ V", "火属性 II", "修繕 I"] },
+    { id: "iron_axe", name: "鉄の斧", cat: "tools", price: 9.00, rarity: "rare", stock: 52, hot: false, blurb: "伐採にも戦闘にも。盾を弾く頼れる一振り。" },
+    { id: "crossbow", name: "クロスボウ", cat: "tools", price: 11.50, rarity: "rare", stock: 40, hot: true, blurb: "ピグリン愛用の遠距離武器。装填して連射。", enchants: ["拡散 III"] },
+    { id: "gold_helmet", name: "金のヘルメット", cat: "armor", price: 5.50, rarity: "common", stock: 60, hot: false, blurb: "被るだけでピグリンが友好的に。交易の正装。" },
+    { id: "diamond_helmet", name: "ダイヤのヘルメット", cat: "armor", price: 24.00, rarity: "epic", stock: 20, hot: false, blurb: "頭部をしっかり防御。視界はそのまま。" },
+    { id: "diamond_chestplate", name: "ダイヤのチェストプレート", cat: "armor", price: 48.00, rarity: "epic", stock: 16, hot: true, blurb: "胴体防御の決定版。一番ダメージを受ける場所に。", enchants: ["防護 III"] },
+    { id: "netherite_chestplate", name: "ネザライトのチェストプレート", cat: "armor", price: 156.00, rarity: "legendary", stock: 4, hot: false, blurb: "最強の胸当て。ノックバック耐性を内蔵。", enchants: ["防護 IV", "修繕 I"] },
+    { id: "gold_leggings", name: "金のレギンス", cat: "armor", price: 6.75, rarity: "common", stock: 48, hot: false, blurb: "軽快な足回り。エンチャント適性が高い。" },
+    { id: "netherite_leggings", name: "ネザライトのレギンス", cat: "armor", price: 142.00, rarity: "legendary", stock: 4, hot: false, blurb: "脚部を完全防護。溶岩ダイブも怖くない。", enchants: ["防護 IV", "棘 III"] },
+    { id: "diamond_boots", name: "ダイヤのブーツ", cat: "armor", price: 22.50, rarity: "epic", stock: 22, hot: false, blurb: "落下耐性を付与すれば崖も平気。" },
+    { id: "gold_boots", name: "金のブーツ", cat: "armor", price: 4.80, rarity: "common", stock: 64, hot: false, blurb: "ピグリンに敵視されない軽量ブーツ。" },
+    { id: "golden_apple", name: "金のリンゴ", cat: "food", price: 18.00, rarity: "rare", stock: 36, hot: true, blurb: "かじれば再生と吸収。ピンチの切り札。" },
+    { id: "cooked_porkchop", name: "焼き豚", cat: "food", price: 0.75, rarity: "common", stock: 240, hot: false, blurb: "満腹度回復に優秀。…ピグリンの前では控えめに。" },
+    { id: "bread", name: "パン", cat: "food", price: 0.40, rarity: "common", stock: 320, hot: false, blurb: "小麦3つの安心ごはん。序盤の主食。" },
+    { id: "gold_ingot", name: "金インゴット", cat: "food", price: 9.00, rarity: "rare", stock: 88, hot: true, blurb: "ピグリンが値踏みする黄金の延べ棒。交易の要。" },
+    { id: "iron_ingot", name: "鉄インゴット", cat: "food", price: 3.50, rarity: "common", stock: 150, hot: false, blurb: "あらゆる道具の土台。常備しておきたい。" },
+    { id: "netherite_ingot", name: "ネザライトインゴット", cat: "food", price: 64.00, rarity: "legendary", stock: 8, hot: false, blurb: "古代の残骸4＋金4から精錬。装備強化の最終素材。" },
+    { id: "emerald", name: "エメラルド", cat: "food", price: 12.00, rarity: "rare", stock: 120, hot: true, blurb: "当店の通貨「エメ」そのもの。村人も大好物。" },
+    { id: "diamond", name: "ダイヤモンド", cat: "food", price: 25.00, rarity: "epic", stock: 40, hot: false, blurb: "あらゆる高級装備の核。ずっと欲しい青。" },
+    { id: "quartz", name: "ネザークォーツ", cat: "food", price: 1.20, rarity: "common", stock: 200, hot: false, blurb: "レッドストーン回路や装飾建材に。" },
+    { id: "lapis", name: "ラピスラズリ", cat: "food", price: 2.40, rarity: "common", stock: 140, hot: false, blurb: "エンチャントに欠かせない深い青の鉱石。" },
+    { id: "ancient_debris", name: "古代の残骸", cat: "food", price: 52.00, rarity: "legendary", stock: 7, hot: false, blurb: "ネザー深部の超希少鉱。爆発でも壊れない。" },
+    { id: "enchanted_book", name: "エンチャントの本", cat: "rare", price: 40.00, rarity: "epic", stock: 14, hot: true, blurb: "金床で装備に付与。狙いの効果をピンポイントで。", enchants: ["修繕 I"] },
+    { id: "totem", name: "不死のトーテム", cat: "rare", price: 99.99, rarity: "legendary", stock: 3, hot: true, blurb: "致命傷を一度だけ無効化。手に持って冒険を。" },
+  ],
+};

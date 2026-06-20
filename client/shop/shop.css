@@ -1,0 +1,352 @@
+/* ============================================================
+   Piggle Shop — ORE VEIN edition
+   Base: polished blackstone (hard, dark)
+   Decoration: real metallic gold (not flat yellow)
+   Accent: MochiOS translucent gems embedded like ore
+   ============================================================ */
+
+.shop-root {
+  /* base font tokens — the MochiOS runtime (tokens.css/fonts.css) provides
+     these in-world; defined here so browser-dev / Tauri render the same. */
+  --font-mono: 'Space Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-sans: 'Space Grotesk', 'Noto Sans JP', system-ui, sans-serif;
+
+  /* ---- re-theme the MochiOS tokens to dark stone ---- */
+  --bg-white: #1b1626;        /* default "surface" → stone */
+  --ink: #ece4d4;             /* bone text */
+  --ink-soft: rgba(236,228,212,0.52);
+
+  /* stone scale */
+  --stone-0: #0c0913;
+  --stone-1: #15111d;
+  --stone-2: #1c1727;         /* card */
+  --stone-3: #261f33;         /* raised */
+  --stone-line: rgba(236,228,212,0.10);
+
+  /* metallic GOLD — straight, not reinterpreted */
+  --gold: #e7c25e;
+  --gold-hi: #fff3c6;
+  --gold-lo: #9a6f1e;
+  --gold-deep: #6f4d12;
+  --gold-line: rgba(231,194,94,0.34);
+  --gold-sheen: linear-gradient(162deg, #fff3c6 0%, #ecca6e 26%, #d2a23c 52%, #9c6f1d 80%, #caa04a 100%);
+  --gold-rail: linear-gradient(90deg, #6f4d12, #e7c25e 35%, #fff3c6 50%, #e7c25e 65%, #6f4d12);
+
+  /* gem / ore accent (driven by the app root) */
+  --gem: #38d27a;
+  --gem-soft: rgba(56,210,122,0.30);
+
+  /* legacy tokens still referenced by components — mapped to ore-vein palette */
+  --bone: #ece4d4;
+  --blackstone: #1a1524;
+  --crimson: #d6354e;
+  --emerald: #38d27a;
+  --emerald-deep: #1f9a55;
+  --carle-blue: #4f86ff;
+  --carle-purple: #b06cff;
+  --carle-red: #d6354e;
+  --carle-yellow: #e7c25e;
+  --carle-green: #38d27a;
+
+  /* tiles */
+  --tile: url(../assets/tex/polished_blackstone.png);
+  --tile-deep: url(../assets/tex/stone_deep.png);
+
+  --r: 0px;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  width: 100%;
+  height: 100%;
+}
+
+html, body, #piggle-root { height: 100%; margin: 0; }
+body { background: #0c0b10; }
+
+/* crisp pixels */
+.px, .slot-img { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* ============================================================
+   STONE SURFACES
+   ============================================================ */
+.blackstone, .blackstone-flat, .win, .p-card, .stone {
+  background-color: var(--stone-2);
+}
+.blackstone {
+  background:
+    linear-gradient(180deg, rgba(231,194,94,0.05) 0%, transparent 16%),
+    linear-gradient(170deg, #221b30 0%, #18131f 55%, #120e19 100%),
+    var(--tile);
+  background-size: auto, auto, 128px 128px;
+  background-blend-mode: normal, normal, soft-light;
+  image-rendering: pixelated;
+  color: var(--ink);
+}
+.blackstone-flat {
+  background: linear-gradient(170deg, #1c1626, #14101c), var(--tile);
+  background-size: auto, 128px 128px;
+  background-blend-mode: normal, soft-light;
+  image-rendering: pixelated;
+}
+
+/* hairline gold rule */
+.gold-rule { height: 2px; background: var(--gold-rail); }
+.lava { height: 3px; background: var(--gold-rail); opacity: 0.9; }
+
+/* kicker */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--gold); opacity: 0.85;
+}
+.kicker.on-dark { color: var(--gold); }
+
+.sec-title { font-family: 'Archivo', sans-serif; font-weight: 800; letter-spacing: -0.02em;
+  line-height: 1.0; color: var(--ink); }
+
+/* ============================================================
+   CARD — stone slab with gold frame + gem corner
+   ============================================================ */
+.p-card {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(231,194,94,0.045), transparent 22%),
+    linear-gradient(180deg, rgba(255,255,255,0.015), rgba(0,0,0,0.16)),
+    var(--tile-deep);
+  background-color: var(--stone-2);
+  background-size: auto, auto, 110px 110px;
+  background-blend-mode: normal, normal, soft-light;
+  image-rendering: pixelated;
+  border: 1px solid var(--gold-line);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 26px rgba(0,0,0,0.55);
+  color: var(--ink);
+}
+.p-card.hov { transition: transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s, border-color .14s; }
+.p-card.hov:hover {
+  transform: translateY(-3px);
+  border-color: var(--gold);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08),
+    0 16px 34px rgba(0,0,0,0.6), 0 0 0 1px var(--gold-line), 0 0 22px var(--gem-soft);
+}
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.pg-btn {
+  border: 1px solid var(--gold-line); background: var(--stone-3); color: var(--ink);
+  padding: 11px 16px; font-family: var(--font-sans); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.02em; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  justify-content: center; position: relative;
+  transition: transform .1s, box-shadow .12s, border-color .12s, background .12s;
+}
+.pg-btn:hover { border-color: var(--gold); box-shadow: 0 0 16px rgba(231,194,94,0.18); }
+.pg-btn:active { transform: translateY(1px); }
+
+/* metallic gold primary */
+.pg-btn.gold {
+  background: var(--gold-sheen); color: #2a1d05; border: 1px solid var(--gold-lo);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 4px rgba(110,77,18,0.5),
+    0 6px 16px rgba(0,0,0,0.45);
+}
+.pg-btn.gold:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.7),
+  inset 0 -2px 4px rgba(110,77,18,0.5), 0 8px 20px rgba(0,0,0,0.5), 0 0 22px rgba(231,194,94,0.4); }
+.pg-btn.gold svg { stroke: #2a1d05 !important; }
+
+.pg-btn.dark { background: linear-gradient(180deg,#211a2d,#15111e); color: var(--ink);
+  border: 1px solid var(--gold-line); }
+.pg-btn.dark:hover { border-color: var(--gold); }
+.pg-btn.crimson { background: linear-gradient(180deg,#d6354e,#a51f38); color: #fff; border: 1px solid #5e1020; }
+.pg-btn.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-soft); }
+.pg-btn.ghost:hover { background: rgba(231,194,94,0.08); border-color: transparent; box-shadow: none; color: var(--gold); }
+.pg-btn.block { width: 100%; }
+.pg-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; transform: none; }
+
+/* ============================================================
+   CHIP / SELECT
+   ============================================================ */
+.chip {
+  border: 1px solid var(--gold-line); background: rgba(255,255,255,0.03); color: var(--ink);
+  padding: 7px 12px; font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .12s, color .12s, border-color .12s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.chip:hover { border-color: var(--gold); }
+.chip[data-on="1"] { background: var(--gold-sheen); color: #2a1d05; border-color: var(--gold-lo);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.3); }
+select.chip { background: rgba(255,255,255,0.03); color: var(--ink); }
+select.chip option { background: #1c1727; color: var(--ink); }
+
+/* ============================================================
+   inputs (global within shop)
+   ============================================================ */
+.shop-root input[type="text"], .shop-root input:not([type]), .shop-root textarea {
+  background: rgba(0,0,0,0.28) !important; color: var(--ink) !important;
+  border-color: var(--gold-line) !important;
+}
+.shop-root input::placeholder { color: rgba(236,228,212,0.35); }
+
+/* ============================================================
+   RARITY
+   ============================================================ */
+.rarity {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 3px 6px; border: 1px solid currentColor;
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(0,0,0,0.35);
+}
+
+/* ============================================================
+   ITEM THUMB — ore embedded in dark stone
+   ============================================================ */
+.thumb {
+  position: relative; width: 100%; aspect-ratio: 1/1; overflow: hidden;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(231,194,94,0.07), transparent 55%),
+    linear-gradient(180deg, #1a1524, #100c17),
+    var(--tile-deep);
+  background-size: auto, auto, 92px 92px;
+  background-blend-mode: screen, normal, soft-light;
+  image-rendering: pixelated;
+}
+.thumb .slot-img { width: 76%; height: 76%; object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.6)); position: relative; }
+
+/* small stone tile (line items, order thumbs, detail) */
+.checker {
+  position: relative;
+  background: linear-gradient(180deg,#1a1524,#100c17), var(--tile-deep);
+  background-size: auto, 80px 80px; background-blend-mode: normal, soft-light;
+  image-rendering: pixelated;
+  border-color: var(--gold-line) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04) !important;
+}
+.checker img, .checker .slot-img { filter: drop-shadow(0 2px 4px rgba(0,0,0,0.55)); }
+
+/* gem glow halo (decorative) */
+.ore-glow::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 60% at 70% 75%, var(--gem-soft), transparent 70%);
+  mix-blend-mode: screen;
+}
+
+/* ============================================================
+   SCROLL
+   ============================================================ */
+.scroll-y { overflow-y: auto; overflow-x: hidden; }
+.scroll-y::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-y::-webkit-scrollbar-thumb { background: rgba(231,194,94,0.22); }
+.no-bar::-webkit-scrollbar { display: none; }
+.hscroll { overflow-x: auto; overflow-y: hidden; display: flex; gap: 8px; }
+.hscroll::-webkit-scrollbar { height: 0; }
+
+/* ============================================================
+   ITEM GRID
+   ============================================================ */
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-min), 1fr));
+  gap: var(--grid-gap);
+}
+
+/* ============================================================
+   DESKTOP WINDOW
+   ============================================================ */
+.win {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  background: linear-gradient(180deg,#16121f,#100d18), var(--tile);
+  background-size: auto, 160px 160px; background-blend-mode: normal, soft-light;
+  image-rendering: pixelated;
+  border: 1px solid var(--gold-line);
+  box-shadow: 0 50px 110px -20px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,0,0,0.6),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.win-bar {
+  height: 42px; flex-shrink: 0; display: flex; align-items: center; gap: 12px;
+  padding: 0 14px; color: var(--ink); position: relative;
+  background: linear-gradient(180deg,#231c30,#171220);
+  border-bottom: 1px solid var(--gold-line);
+}
+.win-bar::after { content: ""; position: absolute; left: 0; right: 0; top: 41px; height: 2px;
+  background: var(--gold-rail); opacity: 0.5; }
+
+/* ============================================================
+   MOBILE TAB BAR
+   ============================================================ */
+.tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 72px; z-index: 60;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: linear-gradient(180deg,#1d1728,#100d18), var(--tile);
+  background-size: auto, 128px 128px; background-blend-mode: normal, soft-light;
+  image-rendering: pixelated;
+  border-top: 1px solid var(--gold-line); padding-bottom: 10px;
+  box-shadow: 0 -1px 0 rgba(231,194,94,0.2);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: transparent; border: none; cursor: pointer; color: rgba(236,228,212,0.42);
+  font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+  position: relative;
+}
+.tab[data-on="1"] { color: var(--gold); }
+.tab[data-on="1"]::before {
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 24px; height: 2px; background: var(--gold-rail);
+}
+.tab .badge {
+  position: absolute; top: 6px; right: calc(50% - 22px); min-width: 16px; height: 16px;
+  background: linear-gradient(180deg,#d6354e,#a51f38); color: #fff; font-family: var(--font-mono); font-size: 9px;
+  font-weight: 700; display: grid; place-items: center; padding: 0 3px; border: 1px solid #5e1020;
+}
+
+/* ============================================================
+   SIDEBAR NAV
+   ============================================================ */
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  font-family: var(--font-sans); font-size: 13px; font-weight: 600; cursor: pointer;
+  border: 1px solid transparent; color: rgba(236,228,212,0.78); background: transparent; width: 100%;
+  text-align: left; letter-spacing: 0.01em; transition: background .12s, color .12s;
+}
+.nav-item:hover { background: rgba(231,194,94,0.07); color: var(--ink); }
+.nav-item[data-on="1"] { background: var(--gold-sheen); color: #2a1d05; border-color: var(--gold-lo);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 12px rgba(0,0,0,0.4); }
+.nav-item .badge {
+  margin-left: auto; min-width: 18px; height: 18px; background: linear-gradient(180deg,#d6354e,#a51f38); color: #fff;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700; display: grid;
+  place-items: center; padding: 0 4px; border: 1px solid #5e1020;
+}
+.nav-item[data-on="1"] .badge { background: #2a1d05; border-color: #000; }
+
+.gbox { display: grid; place-items: center; }
+
+/* ============================================================
+   QTY / STEPS
+   ============================================================ */
+.qty { display: inline-flex; border: 1px solid var(--gold-line); background: rgba(0,0,0,0.25); }
+.qty button { width: 30px; height: 30px; border: none; background: transparent; color: var(--ink);
+  font-family: var(--font-mono); font-size: 16px; font-weight: 700; cursor: pointer; transition: background .1s; }
+.qty button:hover { background: rgba(231,194,94,0.18); color: var(--gold); }
+.qty span { min-width: 34px; display: grid; place-items: center;
+  border-left: 1px solid var(--gold-line); border-right: 1px solid var(--gold-line);
+  font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--ink); }
+
+.steps { display: flex; align-items: center; gap: 0; }
+.steps .dot { width: 26px; height: 26px; border: 1px solid var(--gold-line); display: grid;
+  place-items: center; font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+  background: var(--stone-3); color: var(--ink-soft); flex-shrink: 0; }
+.steps .dot[data-on="1"] { background: var(--gold-sheen); color: #2a1d05; border-color: var(--gold-lo); }
+.steps .dot[data-done="1"] { background: var(--gem); color: #06140b; border-color: transparent; }
+.steps .bar { flex: 1; height: 2px; background: var(--gold-line); }
+.steps .bar[data-done="1"] { background: var(--gold-rail); }
+
+/* ============================================================
+   anims
+   ============================================================ */
+.fadein { animation: pg-fade .26s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pg-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.popin { animation: pg-pop .2s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pg-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.moy-spin { animation: moy-rot 0.8s linear infinite; }
+@keyframes moy-rot { to { transform: rotate(360deg); } }
