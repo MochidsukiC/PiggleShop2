@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Piggle Shop</title>
+    <!-- Tauri webview: fonts + React/Babel from CDN. The shared shop/ + assets/ +
+         piggle-sdk.js are copied in by tools/package.ps1 (frontendDist = this dir). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Noto+Sans+JP:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="shop/shop.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #0c0b10; overflow: hidden; }
+      #piggle-root { position: fixed; inset: 0; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="piggle-root"></div>
+
+    <script>
+      // Desktop frame. Backend endpoint: ?piggle_http=… or window.__PIGGLE_ENDPOINT__;
+      // otherwise the offline catalog below renders the storefront.
+      window.PIGGLE_DEVICE = "desktop";
+    </script>
+
+    <script src="shop/catalog.dev.js"></script>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
+    <script src="piggle-sdk.js"></script>
+    <script type="text/babel" src="shop/crystal.jsx"></script>
+    <script type="text/babel" src="shop/data.jsx"></script>
+    <script type="text/babel" src="shop/ui.jsx"></script>
+    <script type="text/babel" src="shop/screens-browse.jsx"></script>
+    <script type="text/babel" src="shop/screens-buy.jsx"></script>
+    <script type="text/babel" src="shop/app.jsx"></script>
+  </body>
+</html>
