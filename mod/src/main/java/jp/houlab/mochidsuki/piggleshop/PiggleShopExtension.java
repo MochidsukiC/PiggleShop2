@@ -330,20 +330,32 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         return o;
     }
 
+    /**
+     * Reads {@code k} as a string, returning "" for absent/null/non-primitive
+     * values. Must not throw: callers read {@code req_id}/{@code verb} outside the
+     * verb-dispatch try/catch, so a hostile {@code {"verb":{}}} must degrade to ""
+     * (→ unknown_verb) rather than escaping {@link #handle} with no reply.
+     */
     private static String optString(JsonObject o, String k) {
-        return o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : "";
+        JsonElement e = o.get(k);
+        return e != null && !e.isJsonNull() && e.isJsonPrimitive() ? e.getAsString() : "";
     }
 
     /**
      * Reads {@code k} as an int, tolerating client type sloppiness: returns 0
      * (rejected by the caller's {@code qty <= 0} guard) when the key is absent or
-     * not a JSON number, instead of letting Gson throw on a type mismatch.
+     * not an exact integer. A non-integral number (e.g. {@code 1.5}) is rejected
+     * rather than silently truncated, so quantity validation stays strict.
      */
     private static int optInt(JsonObject o, String k) {
         if (!o.has(k) || !o.get(k).isJsonPrimitive() || !o.getAsJsonPrimitive(k).isNumber()) {
             return 0;
         }
-        return o.get(k).getAsInt();
+        try {
+            return o.get(k).getAsBigDecimal().intValueExact();
+        } catch (ArithmeticException e) {
+            return 0; // fractional or out-of-int-range → reject as invalid qty
+        }
     }
 
     private static String key(String mcid) {
