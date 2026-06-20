@@ -46,3 +46,7 @@ bin/
 # NOTE: mod/ compiles against the co-located MochiOS2.0 forge build output
 # (deobf classes, compileOnly) for the connector API — see mod/build.gradle
 # (mochi_forge_classes). Build MochiOS2.0/minecraft/forge first.
+
+# AEM common API jar — third-party PROPRIETARY artifact, NOT redistributed here.
+# Drop it into mod/libs/ locally (build.gradle resolves it; -Paem_jar=<path> also works).
+mod/libs/
