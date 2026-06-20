@@ -252,12 +252,22 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         // here does not deadlock the server.
         Delivery delivery = server.submit(() -> deliver(mcid, lines)).join();
 
+        // A failed delivery granted nothing (deliver() is atomic: player_offline
+        // and unknown_item both grant zero items before returning). Treat it as a
+        // retryable error so checkout() releases the order_id reservation — a
+        // transient offline player, or a catalog fix for a bad item id, can then
+        // be retried with the same order_id without ever double-granting.
+        if (!delivery.ok) {
+            return error("not_delivered", delivery.error);
+        }
+
+        // Reaching here means delivery succeeded (failures returned above).
         JsonObject order = new JsonObject();
         order.addProperty("ok", true);
-        order.addProperty("success", delivery.ok);
+        order.addProperty("success", true);
         order.addProperty("order_id", orderId);
         order.addProperty("mcid", mcid);
-        order.addProperty("status", delivery.ok ? "配送中" : "保留");
+        order.addProperty("status", "配送中");
         order.addProperty("subtotal", round2(subtotal));
         order.addProperty("shipping", round2(shipping));
         order.addProperty("total", round2(total));
@@ -271,12 +281,9 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
             lineArr.add(lo);
         }
         order.add("lines", lineArr);
-        if (delivery.error != null) {
-            order.addProperty("error", delivery.error);
-        }
 
         LOGGER.info("piggleshop: order {} for {} — {} item(s), total {} エメ, delivered={}",
-                orderId, mcid, lines.size(), round2(total), delivery.ok);
+                orderId, mcid, lines.size(), round2(total), delivery.delivered);
         return order;
     }
 
@@ -357,8 +364,9 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         }
         try {
             return o.get(k).getAsBigDecimal().intValueExact();
-        } catch (ArithmeticException e) {
-            return 0; // fractional or out-of-int-range → reject as invalid qty
+        } catch (ArithmeticException | NumberFormatException e) {
+            // fractional, out-of-int-range, or unparseable number → invalid qty
+            return 0;
         }
     }
 
