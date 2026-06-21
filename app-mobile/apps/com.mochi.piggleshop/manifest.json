@@ -12,8 +12,8 @@
   "categories": ["shopping", "utilities"],
   "bundle": {
     "url": "https://github.com/MochidsukiC/PiggleShop2/releases/download/v0.1.0/com.mochi.piggleshop-0.1.0.tar",
-    "sha256": "5ba1bbe66a8320a988d2d749f28dd1e7d8f1860a1cfb79ba351c88f0ee4b288a",
-    "size": 1752064,
+    "sha256": "1dd4fd04970c7c36d4ee0f6be2e04965b40b51600749fa79d4543199306cdc13",
+    "size": 1753600,
     "format": "tar"
   },
   "runtime": { "kind": "js", "foreground": { "entry": "index.html" } },
