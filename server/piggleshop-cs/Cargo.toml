@@ -1,0 +1,47 @@
+[package]
+name = "piggleshop-cs"
+version = "0.1.0"
+edition = "2021"
+description = "Piggle Shop cs.mnn web backend — serves catalog/checkout over the MNN overlay (piggleshop.cs.mnn) and forwards grants to the in-world mod via the MochiOS command bus (mc-sdk auto-route)."
+
+# Standalone workspace so this crate is independent of app-desktop (a Tauri
+# crate) and resolves cleanly while path-depending into the co-located MochiOS2.0
+# checkout for the command-bus SDK.
+[workspace]
+
+[[bin]]
+name = "piggleshop-cs"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime + HTTP. Versions/features PINNED to match MochiOS2.0's workspace
+# so the shared transitive crates (rustls/quinn/ring) unify with mc-sdk's tree.
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "tokio", "query"] }
+tower-http = { version = "0.6", default-features = false, features = ["cors"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+md5 = "0.7"  # Minecraft offline-mode player UUID (nameUUIDFromBytes of "OfflinePlayer:<name>")
+
+# TLS serving for path-C (https://piggleshop.cs.mnn end-to-end through the
+# gateway CONNECT tunnel). Pin the ring provider like MochiOS does.
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+hyper = { version = "1", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+tower = { version = "0.5", default-features = false }
+
+# Command bus: send grant commands to the in-world mod over mTLS QUIC :7421,
+# auto-routed to the player's live server. Path-dep into the co-located
+# MochiOS2.0 checkout (these are server-infra crates, not redistributable).
+# Override the location with [patch] or by editing these paths if your layout
+# differs (DEV.md notes the sibling-checkout assumption).
+mochi-hub-mc-sdk = { path = "../../../MochiOS2.0/hub/mc-sdk" }
+mochi-hub-mc-pki = { path = "../../../MochiOS2.0/hub/mc-pki" }
