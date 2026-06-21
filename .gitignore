@@ -50,3 +50,6 @@ bin/
 # AEM common API jar — third-party PROPRIETARY artifact, NOT redistributed here.
 # Drop it into mod/libs/ locally (build.gradle resolves it; -Paem_jar=<path> also works).
 mod/libs/
+
+# Packaged bundle/release artifacts
+dist/
