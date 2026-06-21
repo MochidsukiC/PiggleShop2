@@ -127,12 +127,23 @@ function Row({ label, value }) {
 
 /* ────────────────────────── CHECKOUT (router by flow) ────────────────────────── */
 function CheckoutScreen() {
-  const { cfg, cart, placeOrder } = useShop();
+  const { cfg, cart, placeOrder, myMcid } = useShop();
   const [done, setDone] = React.useState(null);
   const [paying, setPaying] = React.useState(false);
   const [err, setErr] = React.useState(null);
   // Delivery form (lifted so every flow + placeOrder share the entered MCID).
-  const [form, setForm] = React.useState({ name: "Steve_the_Trader", note: "" });
+  // Recipient defaults to the signed-in player's MCID (OS API prefill); the user
+  // can still edit it to gift another player.
+  const [form, setForm] = React.useState({ name: "", note: "" });
+  const [edited, setEdited] = React.useState(false);
+  // Prefill once the OS-provided MCID arrives (unless the user already typed).
+  React.useEffect(() => {
+    if (myMcid && !edited) setForm((p) => ({ ...p, name: myMcid }));
+  }, [myMcid, edited]);
+  const setFormTracked = React.useCallback((updater) => {
+    setEdited(true);
+    setForm(updater);
+  }, []);
 
   if (cart.length === 0 && !done) {
     return <div style={{ padding: 40 }}><Empty msg="カートが空です。" /></div>;
@@ -141,10 +152,10 @@ function CheckoutScreen() {
 
   const startPay = () => { setErr(null); setPaying(true); };
   const flow = cfg.checkoutFlow === "steps"
-    ? <CheckoutSteps form={form} setForm={setForm} onComplete={startPay} />
+    ? <CheckoutSteps form={form} setForm={setFormTracked} onComplete={startPay} />
     : cfg.checkoutFlow === "barter"
-      ? <CheckoutBarter form={form} setForm={setForm} onComplete={startPay} />
-      : <CheckoutSingle form={form} setForm={setForm} onComplete={startPay} />;
+      ? <CheckoutBarter form={form} setForm={setFormTracked} onComplete={startPay} />
+      : <CheckoutSingle form={form} setForm={setFormTracked} onComplete={startPay} />;
 
   return (
     <>

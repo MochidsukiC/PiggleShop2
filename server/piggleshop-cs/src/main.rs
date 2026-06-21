@@ -230,25 +230,32 @@ async fn checkout(State(st): State<AppState>, Json(req): Json<CheckoutReq>) -> i
 
     // Mock payment: auto-approved (no real debit), per the current design.
 
-    // Resolve the buyer's MC UUID for auto-route. Dev/offline servers key the
-    // presence directory by the offline UUID (nameUUIDFromBytes of
-    // "OfflinePlayer:<name>"); online mode needs the Mojang UUID (future).
-    let uuid = offline_uuid(&req.mcid);
-
     // Forward the grant to the in-world mod (auto-routed to the player's server).
     let (success, status_str, error) = match &st.grant {
         Some(sender) => {
-            let payload = json!({
-                "order_id": req.order_id,
-                "verb": "inventory.give",
-                "target_uuid": uuid.to_string(),
-                "mcid": req.mcid,
-                "items": grant_items,
-            });
-            match sender.grant(&uuid, payload.to_string().as_bytes()).await {
-                GrantOutcome::Delivered => (true, "配送中", None),
-                GrantOutcome::PlayerOffline => (false, "保留", Some("player_offline".to_string())),
-                GrantOutcome::Error(e) => (false, "保留", Some(e)),
+            // Resolve the buyer's canonical MC UUID from their MCID via the Hub
+            // presence directory (§7.3.8 GET minecraft.auto.mnn/v1/resolve/<name>).
+            // This is the authoritative online/offline UUID of the live player —
+            // no client-supplied UUID, no offline-name guessing.
+            match grant::resolve_mcid(&req.mcid).await {
+                Some(uuid) => {
+                    let payload = json!({
+                        "order_id": req.order_id,
+                        "verb": "inventory.give",
+                        "target_uuid": uuid.to_string(),
+                        "mcid": req.mcid,
+                        "items": grant_items,
+                    });
+                    match sender.grant(&uuid, payload.to_string().as_bytes()).await {
+                        GrantOutcome::Delivered => (true, "配送中", None),
+                        GrantOutcome::PlayerOffline => {
+                            (false, "保留", Some("player_offline".to_string()))
+                        }
+                        GrantOutcome::Error(e) => (false, "保留", Some(e)),
+                    }
+                }
+                // Unknown / not-currently-online MCID — cannot auto-route.
+                None => (false, "保留", Some("player_not_found".to_string())),
             }
         }
         None => (false, "保留", Some("backend_cannot_deliver".to_string())),
@@ -359,17 +366,6 @@ fn err(code: &str, detail: &str) -> Value {
 
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
-}
-
-/// Minecraft offline-mode player UUID: `UUID.nameUUIDFromBytes(("OfflinePlayer:"
-/// + name).getBytes(UTF_8))` — a name-based UUID v3 (MD5), with version/variant
-/// bits set, NOT namespaced.
-fn offline_uuid(name: &str) -> Uuid {
-    let digest = md5::compute(format!("OfflinePlayer:{name}").as_bytes());
-    let mut b = digest.0; // 16 bytes
-    b[6] = (b[6] & 0x0f) | 0x30; // version 3
-    b[8] = (b[8] & 0x3f) | 0x80; // IETF variant
-    Uuid::from_bytes(b)
 }
 
 fn env_or(key: &str, default: &str) -> String {

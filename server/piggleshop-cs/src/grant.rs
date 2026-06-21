@@ -20,6 +20,55 @@ use mochi_hub_mc_pki::load_client_identity;
 use mochi_hub_mc_sdk::{McSdk, McSdkConfig, SdkError};
 use uuid::Uuid;
 
+/// Resolve a Minecraft username (MCID) to its canonical UUID via the Hub's
+/// `<title>.auto.mnn` directory (DEV.md §7.3.8), reached through the IPvM gateway
+/// as a forward proxy: `GET http://minecraft.auto.mnn/v1/resolve/<name>` →
+/// `{title, name, player}` where `player` is the UUID string or `null` (a
+/// legitimate "unknown / not currently tracked" name, returned as 200).
+///
+/// `None` ⇒ the player is not in the presence directory (offline / never seen),
+/// so the order cannot be auto-routed yet. The gateway addr defaults to
+/// `127.0.0.1:7411` (MOCHI_CEF_IPVM_GATEWAY / the gateway listen).
+pub async fn resolve_mcid(mcid: &str) -> Option<Uuid> {
+    let gateway = std::env::var("MOCHI_IPVM_GATEWAY")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "127.0.0.1:7411".to_string());
+    // Use the gateway as a forward proxy for the .auto.mnn host (the gateway
+    // terminates the directory read; it never reaches a backend node).
+    let proxy = match reqwest::Proxy::http(format!("http://{gateway}")) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(error = %e, "resolve: bad gateway proxy");
+            return None;
+        }
+    };
+    let client = match reqwest::Client::builder().proxy(proxy).build() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "resolve: client build failed");
+            return None;
+        }
+    };
+    let url = format!("http://minecraft.auto.mnn/v1/resolve/{mcid}");
+    match client.get(&url).send().await {
+        Ok(r) => match r.json::<serde_json::Value>().await {
+            Ok(v) => v
+                .get("player")
+                .and_then(|p| p.as_str())
+                .and_then(|s| Uuid::parse_str(s).ok()),
+            Err(e) => {
+                tracing::warn!(error = %e, "resolve: bad json");
+                None
+            }
+        },
+        Err(e) => {
+            tracing::warn!(error = %e, %mcid, "resolve: gateway request failed");
+            None
+        }
+    }
+}
+
 /// A connected command-bus client, or `None` when no cert is configured.
 #[derive(Clone)]
 pub struct GrantSender {

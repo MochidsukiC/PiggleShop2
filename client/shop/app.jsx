@@ -57,6 +57,15 @@ function PiggleApp() {
   }, []);
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
+  /* signed-in player's MCID (OS API, DEV.md §7.3.8) — prefills the checkout
+     recipient. "" outside MochiOS (browser-dev), where the field is typed. */
+  const [myMcid, setMyMcid] = useState("");
+  useEffect(() => {
+    let alive = true;
+    Piggle.gameName().then((n) => { if (alive && n) setMyMcid(n); });
+    return () => { alive = false; };
+  }, []);
+
   /* router */
   const [route, setRoute] = useState(() => load("piggle.route", { name: "home", params: {} }));
   const go = useCallback((name, params = {}) => {
@@ -134,7 +143,7 @@ function PiggleApp() {
   };
 
   const ctx = { cfg: CFG, t, device, go, route, cart, cartCount, addToCart, setQty, removeFromCart,
-    placeOrder, reorder, orders };
+    placeOrder, reorder, orders, myMcid };
 
   if (loadErr) return <LoadError msg={loadErr} retry={loadCatalog} />;
   if (!ready) return <Splash />;

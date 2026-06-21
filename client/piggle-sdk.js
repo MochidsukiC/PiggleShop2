@@ -1,4 +1,4 @@
-/* global window, fetch, location, URLSearchParams */
+/* global window, fetch, location, URLSearchParams, mochi */
 /* =====================================================================
    Piggle Shop — client SDK (rein-sdk.js pattern)
 
@@ -55,10 +55,34 @@
 
   const enc = encodeURIComponent;
 
+  // The signed-in player's in-game name (MCID) and UUID via the OS API
+  // (mochi.os.gameName / gameUuid, DEV.md §7.3.8). Used to PREFILL the checkout
+  // recipient field so the buyer doesn't retype their own gamertag. Returns ""
+  // outside MochiOS (browser-dev / standalone phone), where the field stays
+  // manually editable.
+  async function gameName() {
+    try {
+      if (window.mochi && mochi.os && mochi.os.gameName) {
+        return (await mochi.os.gameName()) || "";
+      }
+    } catch (e) { /* not in-world */ }
+    return "";
+  }
+  async function gameUuid() {
+    try {
+      if (window.mochi && mochi.os && mochi.os.gameUuid) {
+        return (await mochi.os.gameUuid()) || "";
+      }
+    } catch (e) { /* not in-world */ }
+    return "";
+  }
+
   window.Piggle = {
     inWorld: inWorld,
     isTauri: isTauri,
     base: base,
+    gameName: gameName,
+    gameUuid: gameUuid,
     status: () => getJson("/piggle/status"),
     catalog: () => getJson("/piggle/catalog"),
     item: (id) => getJson("/piggle/item?id=" + enc(id)),
