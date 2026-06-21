@@ -1,15 +1,11 @@
 package jp.houlab.mochidsuki.piggleshop;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -24,299 +20,133 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
-import jp.houlab.mochidsuki.autoeconomicmanagementmod.common.db.entity.TransactionLogs;
 import jp.houlab.mochidsuki.mochi.connector.CommandDispatch;
-import jp.houlab.mochidsuki.piggleshop.aem.AutoEconomicAPIProvider;
 
 /**
- * Piggle Shop receiver extension (DEV.md §7.3) — the in-JVM "enclosed backend".
+ * Piggle Shop receiver extension (DEV.md §7.3) — <b>grant-only executor</b>.
  *
- * <p>The MochiOS connector relays a player's app request (opaque JSON) here as a
- * {@code CMD_INBOUND}; we interpret the verb, mutate the world on the server
- * thread, and reply (toward the requester) with a JSON result. Verbs:
- * <ul>
- *   <li>{@code status}   → {ok, app, version}</li>
- *   <li>{@code catalog}  → the full catalog (AEM listing + creative-tab cats + rarity)</li>
- *   <li>{@code item}     → {ok, item}</li>
- *   <li>{@code checkout} → AEM re-price + mock payment + inventory delivery to the entered MCID</li>
- *   <li>{@code orders}   → a player's recent orders</li>
- * </ul>
+ * <p>Under the split architecture, the {@code piggleshop.cs.mnn} web backend owns
+ * the catalog / pricing / checkout / mock-payment and player-facing HTTP. When a
+ * checkout is confirmed, cs.mnn sends a grant command over the MochiOS command bus
+ * to {@code piggleshop.<UUID>.minecraft.auto.mnn}; the Hub auto-routes it to the
+ * player's live server, the connector relays it here as a {@code CMD_INBOUND}, and
+ * this handler delivers the items to the player's inventory. The mod no longer
+ * interprets a catalog — it is a blind executor of grants, so it MUST authorize
+ * the sender.
  *
- * <p>The listing and prices are authoritative from AEM (via {@link CatalogService});
- * checkout re-prices against the live AEM price and records each sale via
- * {@link AutoEconomicAPI#addTransaction}. Payment is a <b>mock</b> (auto-approved,
- * no real debit) per the current design — the redirect/approve UX lives in the client.
+ * <p>Command (opaque JSON {@code data}):
+ * <pre>{"order_id":"...","verb":"inventory.give",
+ *      "target_uuid":"&lt;mc-uuid&gt;" | "mcid":"&lt;name&gt;",
+ *      "items":[{"item":"minecraft:diamond","count":1}, ...]}</pre>
+ * Ack (CMD_OUTBOUND back to {@code src}):
+ * <pre>{"order_id":"...","status":"ok|duplicate|unknown_verb|bad_request|unauthorized|player_offline|unknown_item:&lt;mc&gt;","delivered":N}</pre>
  *
- * <p>Checkout is <b>idempotent by {@code order_id}</b>: the id is reserved before
- * delivery (see {@link #ordersById}), so a concurrent or replayed order returns
- * the prior result and never double-grants. Idempotency is <em>process-local only</em>
- * (a tracked follow-up). World mutation runs on the server thread
- * ({@link MinecraftServer#submit}); {@link #handle} runs on the connector IO thread,
- * so blocking on that future is safe (no deadlock).
+ * <p>Security: {@code src} is the Hub/cert-asserted backend app_id. We only accept
+ * grants from the expected cs.mnn backend ({@link #ALLOWED_SRC}); any other app_id
+ * is rejected {@code unauthorized} (since the mod now executes grants with no
+ * pricing/checkout guard of its own).
+ *
+ * <p>Idempotency: {@code order_id} is claimed only on a successful delivery, so a
+ * transient failure (player offline / unknown item) is retryable with the same id;
+ * a replay of a completed order acks {@code duplicate} and never double-grants.
+ * Process-local only (lost on restart) — persistent dedup is a tracked follow-up.
  */
 public final class PiggleShopExtension implements CommandDispatch.Handler {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    /** Free shipping at or above this エメ subtotal (mirrors the design). */
-    private static final double SHIP_FREE_OVER = 50.0;
-    private static final double SHIP_FEE = 1.50;
+    /** The backend app_id (cert SAN) allowed to issue grants. */
+    private static final String ALLOWED_SRC = "piggleshop";
 
-    /**
-     * Hard upper bound on a single line's quantity. Bounds the server-thread
-     * delivery loop and makes the {@code delivered} counter overflow-impossible,
-     * so a hostile or buggy client cannot stall the server or wrap the count.
-     */
+    /** Bounds the server-thread delivery loop against a hostile/buggy backend. */
     private static final int MAX_QTY_PER_LINE = 4096;
 
-    /** Recorded as the seller in the AEM transaction ledger. */
-    private static final String SELLER_UUID = "PIGGLE-SHOP-NPC";
-    private static final String TRANSACTION_TYPE = "SHOP";
-
     private final MinecraftServer server;
-    private final CatalogService catalog;
-    private final AutoEconomicAPIProvider aem;
 
-    /**
-     * order_id → order result future. Inserted (incomplete) at checkout start to
-     * reserve the id <em>before</em> delivery, so a concurrent or replayed order
-     * with the same id never double-grants — it joins this future and returns the
-     * same result instead. Completed exceptionally and removed on failure so a
-     * failed attempt can be retried.
-     */
-    private final Map<String, CompletableFuture<JsonObject>> ordersById = new ConcurrentHashMap<>();
-    /** mcid (lower-case) → order_ids, newest first. */
-    private final Map<String, List<String>> ordersByPlayer = new ConcurrentHashMap<>();
+    /** order_ids that have been fully delivered (idempotency, process-local). */
+    private final Set<String> processedOrders = ConcurrentHashMap.newKeySet();
 
-    public PiggleShopExtension(MinecraftServer server, CatalogService catalog) {
+    public PiggleShopExtension(MinecraftServer server) {
         this.server = server;
-        this.catalog = catalog;
-        this.aem = AutoEconomicAPIProvider.getInstance();
     }
 
     @Override
     public void handle(String src, byte[] data, CommandDispatch.Replier reply) {
-        JsonObject req;
+        JsonObject cmd;
+        String orderId;
         try {
-            req = JsonParser.parseString(new String(data, StandardCharsets.UTF_8)).getAsJsonObject();
+            cmd = JsonParser.parseString(new String(data, StandardCharsets.UTF_8)).getAsJsonObject();
+            orderId = optString(cmd, "order_id");
+            if (orderId.isEmpty()) {
+                throw new IllegalArgumentException("order_id required");
+            }
         } catch (RuntimeException e) {
-            // Fail closed but visibly: reply with an error so the requester fails
-            // fast instead of timing out. req_id is unknown (payload unparseable).
-            LOGGER.warn("piggleshop: malformed request: {}", e.toString());
-            JsonObject err = error("bad_json", "request was not a JSON object");
-            reply.reply(src, err.toString().getBytes(StandardCharsets.UTF_8));
+            // No usable order_id ⇒ cannot ack meaningfully; fail closed (log only).
+            LOGGER.warn("piggleshop: malformed grant dropped from src '{}': {}", src, e.toString());
             return;
         }
-        String reqId = optString(req, "req_id");
-        String verb = optString(req, "verb");
-        JsonObject res;
+
+        // Authorize the sender: only the cs.mnn backend may mint items. src is
+        // cert-asserted by the Hub, so this is a real trust boundary.
+        if (!ALLOWED_SRC.equals(src)) {
+            LOGGER.warn("piggleshop: rejected grant from unauthorized src '{}' (order {})", src, orderId);
+            ack(reply, src, orderId, "unauthorized", 0);
+            return;
+        }
+
+        if (!"inventory.give".equals(optString(cmd, "verb"))) {
+            ack(reply, src, orderId, "unknown_verb", 0);
+            return;
+        }
+
+        // Replayed completed order ⇒ ack duplicate, deliver nothing.
+        if (processedOrders.contains(orderId)) {
+            ack(reply, src, orderId, "duplicate", 0);
+            return;
+        }
+
+        Recipient who;
+        List<Line> lines;
         try {
-            res = switch (verb) {
-                case "status"   -> status();
-                case "catalog"  -> catalog.root().deepCopy();
-                case "item"     -> item(optString(req, "id"));
-                case "checkout" -> checkout(req);
-                case "orders"   -> ordersFor(optString(req, "mcid"));
-                default         -> error("unknown_verb", "verb=" + verb);
-            };
+            who = parseRecipient(cmd);
+            lines = parseItems(cmd);
         } catch (RuntimeException e) {
-            LOGGER.warn("piggleshop: handler error for verb '{}': {}", verb, e.toString());
-            res = error("internal", String.valueOf(e.getMessage()));
-        }
-        res.addProperty("req_id", reqId);
-        reply.reply(src, res.toString().getBytes(StandardCharsets.UTF_8));
-    }
-
-    // ── verbs ──────────────────────────────────────────────────────────────
-
-    private JsonObject status() {
-        JsonObject o = new JsonObject();
-        o.addProperty("ok", true);
-        o.addProperty("app", "piggleshop");
-        o.addProperty("version", catalog.root().get("version").getAsString());
-        o.addProperty("aem", aem.isAvailable());
-        return o;
-    }
-
-    private JsonObject item(String id) {
-        JsonObject it = catalog.item(id);
-        if (it == null) {
-            return error("not_found", "item=" + id);
-        }
-        JsonObject o = new JsonObject();
-        o.addProperty("ok", true);
-        o.add("item", it);
-        return o;
-    }
-
-    private JsonObject ordersFor(String mcid) {
-        JsonObject o = new JsonObject();
-        o.addProperty("ok", true);
-        JsonArray arr = new JsonArray();
-        List<String> ids = ordersByPlayer.getOrDefault(key(mcid), List.of());
-        for (String id : ids) {
-            CompletableFuture<JsonObject> ord = ordersById.get(id);
-            // Only ids that completed delivery are placed in ordersByPlayer, so
-            // these futures are already completed; getNow avoids any blocking.
-            if (ord != null) {
-                JsonObject done = ord.getNow(null);
-                if (done != null) {
-                    arr.add(done.deepCopy());
-                }
-            }
-        }
-        o.add("orders", arr);
-        return o;
-    }
-
-    /** {@code checkout {order_id, items:[{id,qty}], mcid, note?}} */
-    private JsonObject checkout(JsonObject req) {
-        String orderId = optString(req, "order_id");
-        if (orderId.isEmpty()) {
-            return error("bad_order", "order_id required");
+            ack(reply, src, orderId, "bad_request", 0);
+            return;
         }
 
-        // Reserve the order_id atomically *before* any delivery. The first caller
-        // installs an incomplete future; any concurrent or replayed checkout with
-        // the same id sees the existing future, joins it, and returns the prior
-        // result — so a replay or a race can never double-grant.
-        CompletableFuture<JsonObject> slot = new CompletableFuture<>();
-        CompletableFuture<JsonObject> existing = ordersById.putIfAbsent(orderId, slot);
-        if (existing != null) {
-            JsonObject dup;
-            try {
-                dup = existing.join().deepCopy();
-            } catch (RuntimeException e) {
-                // The original attempt failed and abandoned its reservation; the
-                // id is now free to retry. Surface a retryable error.
-                return error("retry", "concurrent checkout failed for order_id=" + orderId);
-            }
-            dup.addProperty("duplicate", true);
-            return dup;
+        // Deliver atomically on the server thread. handle() runs on the connector
+        // IO thread, so blocking on the future does not deadlock the server.
+        Delivery d = server.submit(() -> deliver(who, lines)).join();
+        if (!d.ok) {
+            // Nothing was granted ⇒ leave order_id unclaimed so cs.mnn can retry.
+            ack(reply, src, orderId, d.error, 0);
+            return;
         }
 
-        // We own `slot` and MUST resolve it. On failure we complete it exceptionally
-        // (waking any waiter) and remove the reservation so the id can be retried;
-        // on success we complete it and keep it for idempotent replays.
-        try {
-            JsonObject order = processCheckout(req, orderId);
-            if (!order.get("ok").getAsBoolean()) {
-                slot.completeExceptionally(new IllegalStateException("checkout rejected"));
-                ordersById.remove(orderId, slot);
-                return order;
-            }
-            slot.complete(order);
-            ordersByPlayer.computeIfAbsent(key(order.get("mcid").getAsString()),
-                    k -> new CopyOnWriteArrayList<>()).add(0, orderId);
-            return order.deepCopy();
-        } catch (RuntimeException e) {
-            slot.completeExceptionally(e);
-            ordersById.remove(orderId, slot);
-            throw e;
-        }
-    }
-
-    /**
-     * The pure checkout body: validate, server-authoritatively re-price (live AEM
-     * price), run the mock payment, deliver on the server thread, and record the
-     * sale in the AEM ledger. Returns either an {@code error(...)} object (no grant
-     * happened) or a completed order object.
-     */
-    private JsonObject processCheckout(JsonObject req, String orderId) {
-        String mcid = optString(req, "mcid");
-        if (mcid.isEmpty()) {
-            return error("bad_mcid", "mcid required");
-        }
-
-        if (!req.has("items") || !req.get("items").isJsonArray()) {
-            return error("empty_cart", "items array required");
-        }
-        JsonArray items = req.getAsJsonArray("items");
-        if (items.isEmpty()) {
-            return error("empty_cart", "items required");
-        }
-
-        // Server-authoritative re-pricing — never trust client-sent prices.
-        List<Line> lines = new ArrayList<>();
-        double subtotal = 0.0;
-        for (JsonElement el : items) {
-            if (!el.isJsonObject()) {
-                return error("bad_line", "line must be an object");
-            }
-            JsonObject line = el.getAsJsonObject();
-            String id = optString(line, "id");
-            int qty = optInt(line, "qty");
-            if (!catalog.has(id) || qty <= 0 || qty > MAX_QTY_PER_LINE) {
-                return error("bad_line", "id=" + id + " qty=" + qty);
-            }
-            double price = catalog.priceNow(id);
-            lines.add(new Line(id, catalog.mc(id), catalog.name(id), qty, price));
-            subtotal += price * qty;
-        }
-        double shipping = subtotal >= SHIP_FREE_OVER ? 0.0 : SHIP_FEE;
-        double total = subtotal + shipping;
-
-        // Mock payment: auto-approved, no real debit (current design).
-
-        // Deliver on the server thread (inventory access is not thread-safe
-        // off-thread). handle() runs on the connector IO thread, so blocking
-        // here does not deadlock the server.
-        Delivery delivery = server.submit(() -> deliver(mcid, lines)).join();
-
-        // A failed delivery granted nothing (deliver() is atomic). Treat it as a
-        // retryable error so checkout() releases the order_id reservation.
-        if (!delivery.ok) {
-            return error("not_delivered", delivery.error);
-        }
-
-        // Record each sale in the AEM ledger (best-effort; never blocks delivery).
-        if (delivery.buyer != null) {
-            for (Line l : lines) {
-                recordSale(delivery.buyer, l);
-            }
-        }
-
-        JsonObject order = new JsonObject();
-        order.addProperty("ok", true);
-        order.addProperty("success", true);
-        order.addProperty("order_id", orderId);
-        order.addProperty("mcid", mcid);
-        order.addProperty("status", "配送中");
-        order.addProperty("subtotal", round2(subtotal));
-        order.addProperty("shipping", round2(shipping));
-        order.addProperty("total", round2(total));
-        order.addProperty("delivered", delivery.delivered);
-        JsonArray lineArr = new JsonArray();
-        for (Line l : lines) {
-            JsonObject lo = new JsonObject();
-            lo.addProperty("id", l.id);
-            lo.addProperty("qty", l.qty);
-            lo.addProperty("price", round2(l.price));
-            lineArr.add(lo);
-        }
-        order.add("lines", lineArr);
-
-        LOGGER.info("piggleshop: order {} for {} — {} item(s), total {} エメ, delivered={}",
-                orderId, mcid, lines.size(), round2(total), delivery.delivered);
-        return order;
+        processedOrders.add(orderId); // claim only on success
+        LOGGER.info("piggleshop: granted order {} → {} ({} item(s))", orderId, who, d.delivered);
+        ack(reply, src, orderId, "ok", d.delivered);
     }
 
     // ── delivery (server thread) ─────────────────────────────────────────────
 
-    private Delivery deliver(String mcid, List<Line> lines) {
-        ServerPlayer player = server.getPlayerList().getPlayerByName(mcid);
+    private Delivery deliver(Recipient who, List<Line> lines) {
+        ServerPlayer player = who.uuid != null
+                ? server.getPlayerList().getPlayer(who.uuid)
+                : server.getPlayerList().getPlayerByName(who.mcid);
         if (player == null) {
-            return new Delivery(false, 0, "player_offline", null);
+            return new Delivery(false, 0, "player_offline");
         }
-        // Resolve every item id first. A bad/typo mc id is a packaging error, not a
-        // partial-fulfilment case — fail the whole order before granting anything.
+        // Resolve every item id first — a bad id fails the whole order before any
+        // grant, so we never record a partial delivery as success.
         List<Item> resolved = new ArrayList<>(lines.size());
         for (Line line : lines) {
-            ResourceLocation rl = line.mc == null ? null : ResourceLocation.tryParse(line.mc);
+            ResourceLocation rl = ResourceLocation.tryParse(line.mc);
             Item item = rl == null ? null : ForgeRegistries.ITEMS.getValue(rl);
             if (item == null) {
-                LOGGER.warn("piggleshop: unknown item '{}' (catalog id {})", line.mc, line.id);
-                return new Delivery(false, 0, "unknown_item:" + line.id, null);
+                LOGGER.warn("piggleshop: unknown item '{}'", line.mc);
+                return new Delivery(false, 0, "unknown_item:" + line.mc);
             }
             resolved.add(item);
         }
@@ -324,7 +154,7 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         for (int i = 0; i < lines.size(); i++) {
             Item item = resolved.get(i);
             int max = Math.max(1, new ItemStack(item).getMaxStackSize());
-            int remaining = lines.get(i).qty;
+            int remaining = lines.get(i).count;
             while (remaining > 0) {
                 int n = Math.min(remaining, max);
                 ItemStack stack = new ItemStack(item, n);
@@ -335,61 +165,65 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
                 delivered += n;
             }
         }
-        return new Delivery(true, delivered, null, player.getUUID());
+        return new Delivery(true, delivered, null);
     }
 
-    /** Record one sold line in the AEM transaction ledger (best-effort). */
-    private void recordSale(UUID buyer, Line line) {
-        aem.getAPI().ifPresent(api -> {
-            try {
-                BigDecimal unit = BigDecimal.valueOf(line.price);
-                TransactionLogs tx = new TransactionLogs();
-                tx.setTransactionId(UUID.randomUUID().toString());
-                tx.setTimestamp(LocalDateTime.now());
-                tx.setItemId(line.mc);
-                tx.setItemNbtHash(null);
-                tx.setQuantity(line.qty);
-                tx.setUnitPrice(unit);
-                tx.setSellerUuid(SELLER_UUID);
-                tx.setBuyerUuid(buyer.toString());
-                tx.setTransactionType(TRANSACTION_TYPE);
-                tx.setServerStandardPrice(unit);
-                api.addTransaction(tx);
-            } catch (Exception e) {
-                LOGGER.debug("piggleshop: addTransaction failed for {}: {}", line.mc, e.toString());
+    // ── parsing ──────────────────────────────────────────────────────────────
+
+    /** {@code target_uuid} (preferred) or {@code mcid}. Throws if neither is valid. */
+    private static Recipient parseRecipient(JsonObject cmd) {
+        String uuidStr = optString(cmd, "target_uuid");
+        if (!uuidStr.isEmpty()) {
+            return new Recipient(UUID.fromString(uuidStr), null);
+        }
+        String mcid = optString(cmd, "mcid");
+        if (!mcid.isEmpty()) {
+            return new Recipient(null, mcid);
+        }
+        throw new IllegalArgumentException("target_uuid or mcid required");
+    }
+
+    private static List<Line> parseItems(JsonObject cmd) {
+        if (!cmd.has("items") || !cmd.get("items").isJsonArray()) {
+            throw new IllegalArgumentException("items array required");
+        }
+        JsonArray arr = cmd.getAsJsonArray("items");
+        if (arr.isEmpty()) {
+            throw new IllegalArgumentException("items empty");
+        }
+        List<Line> lines = new ArrayList<>(arr.size());
+        for (JsonElement el : arr) {
+            if (!el.isJsonObject()) {
+                throw new IllegalArgumentException("item line must be an object");
             }
-        });
+            JsonObject line = el.getAsJsonObject();
+            String mc = optString(line, "item");
+            int count = optInt(line, "count");
+            if (mc.isEmpty() || count <= 0 || count > MAX_QTY_PER_LINE) {
+                throw new IllegalArgumentException("bad line item=" + mc + " count=" + count);
+            }
+            lines.add(new Line(mc, count));
+        }
+        return lines;
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static JsonObject error(String code, String detail) {
+    private static void ack(CommandDispatch.Replier reply, String dst, String orderId,
+                            String status, int delivered) {
         JsonObject o = new JsonObject();
-        o.addProperty("ok", false);
-        o.addProperty("error", code);
-        if (detail != null) {
-            o.addProperty("detail", detail);
-        }
-        return o;
+        o.addProperty("order_id", orderId);
+        o.addProperty("status", status);
+        o.addProperty("delivered", delivered);
+        reply.reply(dst, o.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Reads {@code k} as a string, returning "" for anything that is not a JSON
-     * string (absent, null, object/array, or a non-string primitive). Strict and
-     * must not throw — callers read {@code req_id}/{@code verb} outside the
-     * verb-dispatch try/catch.
-     */
     private static String optString(JsonObject o, String k) {
         JsonElement e = o.get(k);
         return e != null && e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()
                 ? e.getAsString() : "";
     }
 
-    /**
-     * Reads {@code k} as an int, returning 0 (rejected by the caller's
-     * {@code qty <= 0} guard) when absent or not an exact integer. Fractional /
-     * out-of-range numbers are rejected rather than truncated.
-     */
     private static int optInt(JsonObject o, String k) {
         if (!o.has(k) || !o.get(k).isJsonPrimitive() || !o.getAsJsonPrimitive(k).isNumber()) {
             return 0;
@@ -401,15 +235,14 @@ public final class PiggleShopExtension implements CommandDispatch.Handler {
         }
     }
 
-    private static String key(String mcid) {
-        return mcid == null ? "" : mcid.toLowerCase();
+    private record Recipient(UUID uuid, String mcid) {
+        @Override
+        public String toString() {
+            return uuid != null ? uuid.toString() : mcid;
+        }
     }
 
-    private static double round2(double v) {
-        return Math.round(v * 100.0) / 100.0;
-    }
+    private record Line(String mc, int count) {}
 
-    private record Line(String id, String mc, String name, int qty, double price) {}
-
-    private record Delivery(boolean ok, int delivered, String error, UUID buyer) {}
+    private record Delivery(boolean ok, int delivered, String error) {}
 }

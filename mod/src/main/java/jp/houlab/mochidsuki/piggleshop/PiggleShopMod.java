@@ -8,21 +8,21 @@ import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
 import jp.houlab.mochidsuki.mochi.MochiMod;
-import jp.houlab.mochidsuki.piggleshop.aem.AutoEconomicAPIProvider;
 
 /**
  * Piggle Shop — Forge 1.20.1 entry point.
  *
- * <p>A MochiOS connector <b>receiver extension</b> (DEV.md §7.3): the mod is the
- * in-world "enclosed backend" for the {@code piggleshop} app. It depends on the
- * MochiOS connector mod ({@code mochi}) for {@link MochiMod#DISPATCH} and the
- * sidecar wiring; on server start it registers its handler so player requests
- * auto-routed to {@code piggleshop.<UUID>.minecraft.auto.mnn} are dispatched to
- * {@link PiggleShopExtension}.
+ * <p>A MochiOS connector <b>receiver extension</b> (DEV.md §7.3): the in-world
+ * grant executor for the {@code piggleshop} app. The {@code piggleshop.cs.mnn}
+ * web backend owns the catalog / checkout; on a confirmed purchase it sends a
+ * grant command over the command bus to {@code piggleshop.<UUID>.minecraft.auto.mnn},
+ * which the Hub auto-routes to the player's live server, the connector relays as a
+ * {@code CMD_INBOUND}, and {@link PiggleShopExtension} delivers the items.
  *
- * <p>The server admin must add {@code "piggleshop"} to
- * {@code mochi-server.toml [connector].hosted_app_ids} so the connector
- * advertises the app to the Hub.
+ * <p>Depends on the MochiOS connector mod ({@code mochi}) for {@link MochiMod#DISPATCH}.
+ * The server admin must add {@code "piggleshop"} to
+ * {@code mochi-server.toml [connector].hosted_app_ids} so the connector advertises
+ * the app to the Hub.
  */
 @Mod(PiggleShopMod.MOD_ID)
 public final class PiggleShopMod {
@@ -48,20 +48,9 @@ public final class PiggleShopMod {
      */
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        var server = event.getServer();
-        // Static design catalog = the AEM-absent fallback.
-        Catalog fallback = Catalog.load();
-        // Build the item → creative-tab category map (for the AEM listing).
-        CatalogMeta meta = new CatalogMeta();
-        meta.build(server);
-        // AEM is the authoritative listing/price source; obtained by reflection so
-        // the mod degrades gracefully when AEM is not installed.
-        CatalogService catalog = new CatalogService(
-                server, AutoEconomicAPIProvider.getInstance(), meta, fallback);
-
-        MochiMod.DISPATCH.register(APP_ID, new PiggleShopExtension(server, catalog));
-        LOGGER.info("Piggle Shop: receiver extension registered for app_id '{}' (AEM available={}). "
+        MochiMod.DISPATCH.register(APP_ID, new PiggleShopExtension(event.getServer()));
+        LOGGER.info("Piggle Shop: grant executor registered for app_id '{}'. "
                 + "Ensure mochi-server.toml [connector].hosted_app_ids contains \"{}\".",
-                APP_ID, AutoEconomicAPIProvider.getInstance().isAvailable(), APP_ID);
+                APP_ID, APP_ID);
     }
 }

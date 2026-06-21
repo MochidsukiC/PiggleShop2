@@ -62,37 +62,13 @@ minecraft {
 def mochiForgeClasses = project.findProperty('mochi_forge_classes') ?:
         new File(project.rootDir, '../../MochiOS2.0/minecraft/forge/build/classes/java/main').canonicalPath
 
-// AutoEconomicManagementMod (AEM) common API jar — the authoritative listing +
-// price source (AutoEconomicAPI / PriceSearchResult / TransactionLogs). It is a
-// third-party PROPRIETARY artifact, so it is NOT vendored in this (public) repo:
-// drop it into mod/libs/ (any name matching the glob), or point at a copy with
-// -Paem_jar=<path>. Resolution order: -Paem_jar → mod/libs/*.jar → the
-// co-located sibling checkouts (MochiOS2.0 / piggleshop). Compile fails with a
-// clear message if none is found. Runtime is provided by the AEM mod on the
-// server (optional dependency); the mod degrades gracefully if AEM is absent.
-def aemJar = {
-    if (project.hasProperty('aem_jar')) {
-        return project.file(project.property('aem_jar'))
-    }
-    def libs = fileTree(dir: "${project.projectDir}/libs", include: 'autoeconomicmanagementmod-common*.jar').files
-    if (!libs.isEmpty()) { return libs.iterator().next() }
-    def candidates = [
-            new File(project.rootDir, '../../piggleshop/libs/autoeconomicmanagementmod-common.jar'),
-            new File(project.rootDir, '../../MochiOS2.0/minecraft/forge/libs/autoeconomicmanagementmod-common.jar'),
-    ]
-    return candidates.find { it.exists() }
-}()
-if (aemJar == null || !aemJar.exists()) {
-    throw new GradleException(
-            'AEM common jar not found. Provide autoeconomicmanagementmod-common.jar in mod/libs/, ' +
-            'or pass -Paem_jar=<path>. (It is proprietary and intentionally not committed.)')
-}
+// NOTE: the grant-only mod no longer touches AEM — catalog/pricing now live in
+// the piggleshop.cs.mnn web backend. (AEM is consumed there, over MNN, later.)
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 
     compileOnly files(mochiForgeClasses)
-    compileOnly files(aemJar)
 }
 
 // Property-templated mods.toml / pack.mcmeta (gradle.properties substitution).
